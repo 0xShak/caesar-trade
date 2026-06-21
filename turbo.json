@@ -1,0 +1,34 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "PRIVY_APP_ID",
+    "PRIVY_APP_SECRET",
+    "POLYGON_RPC_HTTP",
+    "AMOY_RPC_HTTP",
+    "AMOY_PRIVATE_KEY",
+    "POLYMARKET_CLOB_URL",
+    "KALSHI_API_BASE",
+    "KALSHI_API_KEY_ID",
+    "KALSHI_PRIVATE_KEY_PEM"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {},
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
+    }
+  }
+}

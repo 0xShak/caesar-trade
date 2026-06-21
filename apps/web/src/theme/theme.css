@@ -1,0 +1,77 @@
+/*
+ * Caesar Terminal theme tokens (bible §10/§11).
+ * Five themes selected by <html data-theme="…">.
+ * Neo-brutalist monospace terminal palette.
+ */
+
+[data-theme="dark"] {
+  --bg: #0c0e12;
+  --bg2: #12151c;
+  --bg3: #171b24;
+  --line: #222836;
+  --fg: #dfe5ef;
+  --mut: #8b96ab;
+  --acc: #c084fc;
+  --acc2: #7dd3fc;
+  --grn: #34d399;
+  --ylw: #fbbf24;
+  --red: #fb7185;
+}
+
+/* Dark, high contrast: brighter fg, harder lines. */
+[data-theme="dark-hc"] {
+  --bg: #000000;
+  --bg2: #0a0c10;
+  --bg3: #11141b;
+  --line: #3a4255;
+  --fg: #ffffff;
+  --mut: #b4bfd2;
+  --acc: #d8b4fe;
+  --acc2: #a5e4ff;
+  --grn: #4ade80;
+  --ylw: #fcd34d;
+  --red: #fda4af;
+}
+
+[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg2: #ffffff;
+  --bg3: #eef0f4;
+  --line: #d4d9e2;
+  --fg: #1a1f29;
+  --mut: #5b6678;
+  --acc: #7c3aed;
+  --acc2: #0284c7;
+  --grn: #059669;
+  --ylw: #b45309;
+  --red: #e11d48;
+}
+
+[data-theme="light-hc"] {
+  --bg: #ffffff;
+  --bg2: #ffffff;
+  --bg3: #f0f2f6;
+  --line: #9aa3b2;
+  --fg: #000000;
+  --mut: #303a4a;
+  --acc: #6d28d9;
+  --acc2: #0369a1;
+  --grn: #047857;
+  --ylw: #92400e;
+  --red: #be123c;
+}
+
+/* Dusk: warm violet-tinted dark. */
+[data-theme="dusk"] {
+  --bg: #14111c;
+  --bg2: #1b1726;
+  --bg3: #221d31;
+  --line: #34293f;
+  --fg: #e8e1f0;
+  --mut: #9d8fb0;
+  --acc: #c084fc;
+  --acc2: #f0abfc;
+  --grn: #4ade80;
+  --ylw: #fbbf24;
+  --red: #fb7185;
+}

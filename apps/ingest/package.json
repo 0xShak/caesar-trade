@@ -1,0 +1,24 @@
+{
+  "name": "@caesar/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/run.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "ingest": "node --env-file-if-exists=../../.env --import tsx src/run.ts",
+    "ingest:once": "node --env-file-if-exists=../../.env --import tsx src/run.ts --once"
+  },
+  "dependencies": {
+    "@caesar/config": "workspace:*",
+    "@caesar/db": "workspace:*",
+    "@caesar/money": "workspace:*",
+    "decimal.js": "^10.4.3",
+    "drizzle-orm": "^0.38.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

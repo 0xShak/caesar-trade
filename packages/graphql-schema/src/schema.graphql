@@ -1,0 +1,1353 @@
+# ============================================================================
+# Caesar Terminal — GraphQL contract (Phase 0)
+#
+# Source of truth: /root/parity-study/dossier-graphql-schema.md (verbatim
+# recovered Parity schema) + Caesar-terminal.html §4. This is the Phase 0
+# *contract*: the full operation surface (50 queries, 29 mutations, 6
+# subscriptions) is declared so clients can be generated and typed, but only a
+# handful of resolvers are wired in Phase 0. Every root Query/Mutation field
+# therefore returns a NULLABLE type so unimplemented operations resolve to null
+# rather than erroring. Money fields are microdollars: declared as Float where
+# the dossier shows Float (*Microdollars), otherwise String.
+# ============================================================================
+
+scalar DateTime
+scalar JSON
+
+# --------------------------------------------------------------------------- #
+# Enums (confirmed literals — dossier §2)
+# --------------------------------------------------------------------------- #
+
+enum Platform {
+  polymarket
+  kalshi
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+# ITrade.side / placeOrder side at the API layer use the same uppercase set.
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  limit
+  market
+}
+
+enum OrderExecutionType {
+  GTC
+  GTD
+  FOK
+}
+
+enum MarketStatus {
+  active
+  LIVE
+  OPEN
+  CLOSED
+  RESOLVED
+  PENDING
+  MATCHED
+}
+
+enum OutcomeResult {
+  YES
+  NO
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+  RESOLVED
+}
+
+enum SavedFilterScope {
+  MARKETS
+  TRADERS
+}
+
+enum StrategyType {
+  TWAP
+  DCA
+  SCALE
+}
+
+# --------------------------------------------------------------------------- #
+# Core entity types
+# --------------------------------------------------------------------------- #
+
+type NetFlowVolumes {
+  volume1hMicrodollars: Float
+  volume24hMicrodollars: Float
+  volume1hChangePct: Float
+  volume24hChangePct: Float
+}
+
+type MarketOutcome {
+  outcomeId: ID
+  externalOutcomeId: String
+  outcomeName: String
+  isPrimary: Boolean
+  midPoint: Float
+  spread: Float
+  result: OutcomeResult
+  apy: Float
+  outcomeIndex: Int
+  midpointMicrodollars: Float
+  spreadMicrodollars: Float
+}
+
+type PlatformMarket {
+  id: ID
+  marketId: ID
+  externalId: String
+  platform: Platform
+  platformSlug: String
+  question: String
+  displayNameShort: String
+  eventTitle: String
+  imageUrl: String
+  icon: String
+  endDate: DateTime
+  tickSize: Float
+  minimumOrderSize: Float
+  feeRateBps: Int
+  feeRate: Float
+  negRisk: Boolean
+  priceChange24hMicrodollars: Float
+}
+
+type Tag {
+  slug: String
+  label: String
+  activeMarketCount: Int
+}
+
+type Market {
+  id: ID!
+  eventId: ID
+  question: String
+  displayNameShort: String
+  description: String
+  status: MarketStatus
+  volume: Float
+  liquidity: Float
+  totalOpenInterest: Float
+  totalVolume: Float
+  combinedLiquidity: Float
+  icon: String
+  startDate: DateTime
+  endDate: DateTime
+  resolutionDate: DateTime
+  slug: String
+  platform: Platform
+  outcomes: [MarketOutcome!]
+  platformMarkets: [PlatformMarket!]
+  netFlowVolumes: NetFlowVolumes
+}
+
+# The list/feed row shape (fragment MarketListItemFields).
+type MarketItemListEntry {
+  id: ID!
+  eventId: ID
+  question: String
+  displayNameShort: String
+  eventTitle: String
+  description: String
+  status: MarketStatus
+  startDate: DateTime
+  endDate: DateTime
+  resolutionDate: DateTime
+  volume: Float
+  liquidity: Float
+  icon: String
+  slug: String
+  platform: Platform
+  tags: [Tag!]
+  outcomes: [MarketOutcome!]
+  platformMarkets: [PlatformMarket!]
+  volume1h: Float
+  volume24h: Float
+  volume1hChangePct: Float
+  volume24hChangePct: Float
+  priceChange1hMicrodollars: Float
+  priceChange24hMicrodollars: Float
+  priceChange1hPct: Float
+  priceChange24hPct: Float
+}
+
+type MarketConnection {
+  data: [MarketItemListEntry!]
+  hasMore: Boolean
+  total: Int
+}
+
+type PlatformEvent {
+  id: ID
+  platform: Platform
+  imageUrl: String
+}
+
+type Event {
+  id: ID!
+  title: String
+  totalVolume: Float
+  combinedLiquidity: Float
+  earliestResolutionDate: DateTime
+  platformEvents: [PlatformEvent!]
+  markets: [Market!]
+}
+
+# --------------------------------------------------------------------------- #
+# Traders
+# --------------------------------------------------------------------------- #
+
+type TraderBadges {
+  age: String
+  verified: Boolean
+  assetLevel: String
+  pnlLevel: String
+  activeSince: DateTime
+  pnlLevelMicrodollars: Float
+  assetLevelMicrodollars: Float
+  isBot: Boolean
+  activePositionsCount: Int
+}
+
+type TraderTraitValue {
+  percentage: Float
+}
+
+type TraderTraits {
+  contrarian: TraderTraitValue
+  trendFollower: TraderTraitValue
+  lotteryTicket: TraderTraitValue
+  whaleSplash: TraderTraitValue
+  winRate: TraderTraitValue
+  activePositions: TraderTraitMicro
+  usdcBalanceMicrodollars: Float
+}
+
+type TraderTraitMicro {
+  microdollars: Float
+}
+
+type TraderAnalytics {
+  allTimeVolume: Float
+  allTimePnl: Float
+  rank: Int
+}
+
+type TraderOnchain {
+  usdcBalance: Float
+  accountAgeDays: Int
+  firstTransactionDate: DateTime
+  firstFundingAmount: Float
+  firstFundingSource: String
+  firstFundingTxHash: String
+}
+
+interface ITrader {
+  id: ID!
+  platform: Platform
+  platformId: String
+  username: String
+  displayName: String
+  customDisplayName: String
+  profileImageUrl: String
+  isVerified: Boolean
+  socialTwitter: String
+  badges: TraderBadges
+}
+
+type BaseTrader implements ITrader {
+  id: ID!
+  platform: Platform
+  platformId: String
+  username: String
+  displayName: String
+  customDisplayName: String
+  profileImageUrl: String
+  isVerified: Boolean
+  socialTwitter: String
+  badges: TraderBadges
+  bio: String
+  platformAccountCreatedAt: DateTime
+  lastSyncedAt: DateTime
+  analytics: TraderAnalytics
+  onchain: TraderOnchain
+  traits: TraderTraits
+  relatedTraders: [ITrader!]
+}
+
+type TraderListItem implements ITrader {
+  id: ID!
+  platform: Platform
+  platformId: String
+  username: String
+  displayName: String
+  customDisplayName: String
+  profileImageUrl: String
+  isVerified: Boolean
+  socialTwitter: String
+  badges: TraderBadges
+  bio: String
+  analytics: TraderAnalytics
+  onchain: TraderOnchain
+  traits: TraderTraits
+}
+
+type TraderConnection {
+  data: [TraderListItem!]
+  hasMore: Boolean
+  total: Int
+}
+
+# --------------------------------------------------------------------------- #
+# Trades (ITrade interface + members)
+# --------------------------------------------------------------------------- #
+
+interface ITrade {
+  key: String
+  transactionHash: String
+  externalMarketId: String
+  externalOutcomeId: String
+  side: TradeSide
+  price: Float
+  size: Float
+  totalValue: Float
+  rawPrice: Float
+  datetime: DateTime
+  platform: Platform
+  isMaker: Boolean
+  outcomeId: String
+  platformTraderExternalId: String
+  feeShares: Float
+  feeMicrodollars: Float
+}
+
+type BaseTrade implements ITrade {
+  key: String
+  transactionHash: String
+  externalMarketId: String
+  externalOutcomeId: String
+  side: TradeSide
+  price: Float
+  size: Float
+  totalValue: Float
+  rawPrice: Float
+  datetime: DateTime
+  platform: Platform
+  isMaker: Boolean
+  outcomeId: String
+  platformTraderExternalId: String
+  feeShares: Float
+  feeMicrodollars: Float
+  trader: ITrader
+  counterparties: [ITrade!]
+  outcomeName: String
+  marketId: ID
+  marketQuestion: String
+  marketDisplayNameShort: String
+  marketEventTitle: String
+  marketIcon: String
+  marketPlatformSlug: String
+}
+
+type UserTrade implements ITrade {
+  key: String
+  transactionHash: String
+  externalMarketId: String
+  externalOutcomeId: String
+  side: TradeSide
+  price: Float
+  size: Float
+  totalValue: Float
+  rawPrice: Float
+  datetime: DateTime
+  platform: Platform
+  isMaker: Boolean
+  outcomeId: String
+  platformTraderExternalId: String
+  feeShares: Float
+  feeMicrodollars: Float
+  status: String
+  outcomeName: String
+  platformMarket: PlatformMarket
+}
+
+type UserTradeConnection {
+  data: [UserTrade!]
+  nextCursor: String
+}
+
+# --------------------------------------------------------------------------- #
+# Orders
+# --------------------------------------------------------------------------- #
+
+type UserOrder {
+  id: ID
+  userId: ID
+  platform: Platform
+  platformMarketId: String
+  platformOutcomeId: String
+  platformOrderId: String
+  side: OrderSide
+  outcome: String
+  outcomeName: String
+  size: Float
+  requestedPrice: Float
+  executedPrice: Float
+  requestedAmount: Float
+  executedAmount: Float
+  filledSize: Float
+  filledAmount: Float
+  status: String
+  orderType: OrderType
+  orderExecutionType: OrderExecutionType
+  expirationSec: Int
+  walletAddress: String
+  failureReason: String
+  createdAt: DateTime
+  updatedAt: DateTime
+  submittedAt: DateTime
+  filledAt: DateTime
+  platformMarket: PlatformMarket
+}
+
+type UserOrderConnection {
+  data: [UserOrder!]
+  hasMore: Boolean
+  total: Int
+}
+
+# placeOrder result interface + members.
+interface IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+}
+
+type LimitOrderPlacement implements IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+  orderId: ID
+  status: String
+  platformOrderId: String
+  estimatedPrice: Float
+  estimatedAmount: Float
+  platformStatus: String
+  avgFillPrice: Float
+  filledAmount: Float
+  filledSize: Float
+  order: UserOrder
+}
+
+type MarketOrderPlacement implements IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+  orderId: ID
+  status: String
+  platformOrderId: String
+  estimatedPrice: Float
+  estimatedAmount: Float
+  platformStatus: String
+  avgFillPrice: Float
+  filledAmount: Float
+  filledSize: Float
+  order: UserOrder
+}
+
+type SplitOrderPlacement implements IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+  transactionHash: String
+  transactionId: String
+  amountSplit: Float
+}
+
+type MergeOrderPlacement implements IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+  transactionHash: String
+  transactionId: String
+  amountMerged: Float
+}
+
+type ConvertOrderPlacement implements IOrderPlacement {
+  platform: Platform
+  externalMarketId: String
+  externalOutcomeId: String
+  transactionHash: String
+  transactionId: String
+  amountConverted: Float
+}
+
+type OrderBatchResultEntry {
+  success: Boolean
+  error: String
+  orderId: ID
+  status: String
+  platformOrderId: String
+  estimatedPrice: Float
+  estimatedAmount: Float
+  platformStatus: String
+  avgFillPrice: Float
+  filledAmount: Float
+  filledSize: Float
+  order: UserOrder
+}
+
+type OrderBatchResult {
+  results: [OrderBatchResultEntry!]
+}
+
+type CancelOrderResult {
+  orderId: ID
+  status: String
+  platformOrderId: String
+}
+
+type CancelMarketOrdersFailure {
+  platformOrderId: String
+  reason: String
+}
+
+type CancelMarketOrdersResult {
+  canceledPlatformOrderIds: [String!]
+  failures: [CancelMarketOrdersFailure!]
+}
+
+type AutomatedOrderLeg {
+  id: ID
+  legIndex: Int
+  status: String
+  plannedAt: DateTime
+  submittedAt: DateTime
+  failureReason: String
+  platformOrderId: String
+}
+
+type AutomatedOrder {
+  id: ID
+  strategyType: StrategyType
+  status: String
+  side: OrderSide
+  externalMarketId: String
+  createdAt: DateTime
+  legs: [AutomatedOrderLeg!]
+}
+
+type ClaimPositionResult {
+  transactionHash: String
+  transactionId: String
+  amountRedeemed: Float
+  success: Boolean
+}
+
+# --------------------------------------------------------------------------- #
+# Positions
+# --------------------------------------------------------------------------- #
+
+type PositionBadgeTag {
+  slug: String
+  percentage: Float
+  valueMicrodollars: Float
+}
+
+type PositionBadges {
+  assetConcentrationPercentage: Float
+  topTagConcentration: [PositionBadgeTag!]
+}
+
+type TraderPosition {
+  id: ID
+  outcomeId: String
+  outcomeExternalId: String
+  outcome: String
+  size: Float
+  avgEntryPrice: Float
+  currentPrice: Float
+  costBasis: Float
+  currentValue: Float
+  unrealizedPnl: Float
+  unrealizedPnlPercent: Float
+  realizedPnl: Float
+  realizedPnlPercent: Float
+  redeemable: Boolean
+  rank: Int
+  updatedAt: DateTime
+  imageUrl: String
+  badges: PositionBadges
+  marketOutcome: MarketOutcome
+}
+
+type TraderPositionGroup {
+  marketId: ID
+  marketTicker: String
+  marketTitle: String
+  displayNameShort: String
+  eventTitle: String
+  platform: Platform
+  platformSlug: String
+  positions: [TraderPosition!]
+}
+
+type SyncMeta {
+  isStale: Boolean
+  lastSyncedAt: DateTime
+  refreshTriggered: Boolean
+}
+
+type TraderPositionsResult {
+  data: [TraderPositionGroup!]
+  meta: SyncMeta
+}
+
+type Position {
+  platformTraderId: String
+  platformMarketId: String
+  platformOutcomeId: String
+  outcomeId: String
+  outcome: String
+  side: OrderSide
+  size: Float
+  avgEntryPrice: Float
+  currentPrice: Float
+  latestMidpoint: Float
+  costBasis: Float
+  currentValue: Float
+  unrealizedPnl: Float
+  exitPrice: Float
+  totalBought: Float
+  totalSold: Float
+  totalBuySize: Float
+  totalSellSize: Float
+  realizedPnl: Float
+  value: Float
+  redeemable: Boolean
+  platformMarket: PlatformMarket
+  marketOutcome: MarketOutcome
+}
+
+type PositionConnection {
+  data: [Position!]
+  hasMore: Boolean
+  total: Int
+}
+
+type MarketPositionHolder {
+  proxyWallet: String
+  size: Float
+  avgEntryPrice: Float
+  currentValue: Float
+  unrealizedPnl: Float
+  totalPnl: Float
+  totalBought: Float
+  totalSold: Float
+  trader: ITrader
+  badges: PositionBadges
+  marketOutcome: MarketOutcome
+}
+
+type MarketPositionGroup {
+  outcomeId: String
+  outcome: String
+  outcomeIndex: Int
+  positions: [MarketPositionHolder!]
+}
+
+# --------------------------------------------------------------------------- #
+# Portfolio / wallet / Kalshi
+# --------------------------------------------------------------------------- #
+
+type PortfolioStats {
+  positionValue: Float
+  marketsTraded: Int
+  largestWin: Float
+  pnl: Float
+  activePnl: Float
+}
+
+type KalshiPortfolioStats {
+  balanceMicrodollars: Float
+  positionValueMicrodollars: Float
+  portfolioValueMicrodollars: Float
+  totalPnlMicrodollars: Float
+  activePnlMicrodollars: Float
+  marketsTraded: Int
+  largestWinMicrodollars: Float
+}
+
+type KalshiCredentials {
+  exists: Boolean
+  message: String
+}
+
+type WalletPolygonBalances {
+  usdceBalance: Float
+  usdceError: String
+  usdcBalance: Float
+  usdcError: String
+  pUsdBalance: Float
+  pUsdError: String
+}
+
+type WalletBalances {
+  polygon: WalletPolygonBalances
+}
+
+type Wallet {
+  address: String
+  balances: WalletBalances
+  totalUsdceBalance: Float
+  availableUsdceBalance: Float
+  totalUsdcBalance: Float
+  totalPUsdBalance: Float
+}
+
+type WalletBalance {
+  wallets: [Wallet!]
+}
+
+# --------------------------------------------------------------------------- #
+# User / Me
+# --------------------------------------------------------------------------- #
+
+type TradingAccount {
+  id: ID
+  eoaAddress: String
+  polymarketTradingAddress: String
+  polymarketWalletKind: String
+  isSafeDeployed: Boolean
+  isDefault: Boolean
+  isEmbedded: Boolean
+  nickname: String
+  createdAt: DateTime
+}
+
+type PolymarketTraderRef {
+  id: ID
+  profileImageUrl: String
+}
+
+type Me {
+  id: ID!
+  tosAccepted: Boolean
+  tosVersion: String
+  inviteClaimed: Boolean
+  referralCode: String
+  referralsRemaining: Int
+  referralsTotal: Int
+  parityAdmin: Boolean
+  polymarketTradingAddress: String
+  polymarketWalletKind: String
+  polymarketTradingAccounts: [TradingAccount!]
+  defaultPolymarketTradingAccountId: ID
+  defaultKalshiTradingAccountId: ID
+  welcomeWizardCompleted: Boolean
+  hasServerSigner: Boolean
+  isSafeDeployed: Boolean
+  hasV1Approvals: Boolean
+  hasV2Approvals: Boolean
+  hasApiCredentials: Boolean
+  isWalletSetupComplete: Boolean
+  socialTwitter: String
+  profilePictureUrl: String
+  polymarketTrader: PolymarketTraderRef
+}
+
+# --------------------------------------------------------------------------- #
+# Saved filters / notifications / news / misc
+# --------------------------------------------------------------------------- #
+
+type SavedFilter {
+  scope: SavedFilterScope
+  name: String
+  filters: JSON
+  publicId: String
+  version: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type ImportSharedFilterResult {
+  importedNow: Boolean
+  savedFilter: SavedFilter
+}
+
+type BulkSaveSkip {
+  name: String
+  reason: String
+  message: String
+}
+
+type BulkSaveFiltersResult {
+  saved: [SavedFilter!]
+  skipped: [BulkSaveSkip!]
+}
+
+interface Notification {
+  id: ID!
+  read: Boolean
+  createdAt: DateTime
+  title: String
+  body: String
+}
+
+type MarketResolvedNotification implements Notification {
+  id: ID!
+  read: Boolean
+  createdAt: DateTime
+  title: String
+  body: String
+  claimableValueMicrodollars: Float
+  market: Market
+}
+
+type OrderFilledNotification implements Notification {
+  id: ID!
+  read: Boolean
+  createdAt: DateTime
+  title: String
+  body: String
+  orderId: ID
+  side: OrderSide
+  outcome: String
+  filledPriceMicrodollars: Float
+  filledSize: Float
+  market: Market
+}
+
+type SystemNotification implements Notification {
+  id: ID!
+  read: Boolean
+  createdAt: DateTime
+  title: String
+  body: String
+  targetUrl: String
+  imageUrl: String
+}
+
+type NotificationConnection {
+  notifications: [Notification!]
+  unreadCount: Int
+  hasMore: Boolean
+}
+
+type NewsArticle {
+  articleId: ID
+  content: String
+  link: String
+  source: String
+  sourceLink: String
+  publishDate: DateTime
+}
+
+type ConvictionStrengthOutcome {
+  outcomeId: ID
+  outcomeName: String
+  value: Float
+  strengthPerc: Float
+  shareCount: Float
+  traderCount: Int
+  divergence: Float
+}
+
+type ConvictionStrengthMetric {
+  outcomes: [ConvictionStrengthOutcome!]
+  totalValue: Float
+  traderCount: Int
+}
+
+type MarketStrength {
+  sharpConvictionStrength: ConvictionStrengthMetric
+  genericConvictionStrength: ConvictionStrengthMetric
+  overallStrength: ConvictionStrengthMetric
+  sharpTraderCount: Int
+}
+
+type TradeCounterparty {
+  platform: Platform
+  transactionHash: String
+  counterparties: [ITrade!]
+}
+
+type ApiKey {
+  id: ID
+  keyPrefix: String
+  name: String
+  environment: String
+  createdAt: DateTime
+  lastUsedAt: DateTime
+  isActive: Boolean
+}
+
+type CreateApiKeyResult {
+  id: ID
+  keyPrefix: String
+  name: String
+  environment: String
+  createdAt: DateTime
+  apiKey: String
+}
+
+type OrderbookAnalysisRow {
+  trader: ITrader
+  priceCents: Float
+  side: TradeSide
+  outcomeName: String
+  fillCount: Int
+  avgFillSize: Float
+  minFillSize: Float
+  maxFillSize: Float
+  totalSize: Float
+  firstFillAt: DateTime
+  lastFillAt: DateTime
+  fillDurationSeconds: Int
+  totalValueMicrodollars: Float
+  usdcBalanceMicrodollars: Float
+}
+
+type OrderbookAnalysis {
+  data: [OrderbookAnalysisRow!]
+}
+
+type OrderbookFillEntry {
+  transactionHash: String
+  datetime: DateTime
+  side: TradeSide
+  price: Float
+  size: Float
+  totalValueMicrodollars: Float
+}
+
+type OrderbookFillTrader {
+  traderId: String
+  fills: [OrderbookFillEntry!]
+}
+
+type OrderbookFills {
+  traders: [OrderbookFillTrader!]
+}
+
+type UmaProposal {
+  proposer: String
+  proposedOutcome: String
+  expiresAt: DateTime
+  proposedAt: DateTime
+}
+
+type UmaDispute {
+  disputer: String
+  disputedAt: DateTime
+  disputedProposedOutcome: String
+}
+
+type UmaTimelineEntry {
+  type: String
+  timestamp: DateTime
+  outcome: String
+  actor: String
+  txHash: String
+}
+
+type UmaResolution {
+  status: String
+  umaOracleUrl: String
+  isPaused: Boolean
+  isFlagged: Boolean
+  lastEventAt: DateTime
+  adapter: String
+  requestTimestamp: DateTime
+  bondAmount: Float
+  currentProposal: UmaProposal
+  currentDispute: UmaDispute
+  resolvedAt: DateTime
+  resolvedOutcome: String
+  timeline: [UmaTimelineEntry!]
+}
+
+type PlatformCommentReaction {
+  id: ID
+  reaction: String
+  userAddress: String
+}
+
+type PlatformComment {
+  platform: Platform
+  externalId: String
+  externalMarketId: String
+  body: String
+  parentCommentId: ID
+  rootParentCommentId: ID
+  userAddress: String
+  replyAddress: String
+  reactions: [PlatformCommentReaction!]
+  reactionCount: Int
+  reportCount: Int
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type TrackedTrader {
+  id: ID
+  platform: Platform
+  platformTraderExternalId: String
+  username: String
+  displayName: String
+  profileImageUrl: String
+  usdcBalance: Float
+  totalPnl: Float
+  rank: Int
+  lastTradeAt: DateTime
+}
+
+type TrackedTradesHistory {
+  data: [BaseTrade!]
+}
+
+type InviteCodePreview {
+  valid: Boolean
+  inviterUsername: String
+  message: String
+}
+
+# --------------------------------------------------------------------------- #
+# Inputs
+# --------------------------------------------------------------------------- #
+
+input MarketFiltersInput {
+  status: MarketStatus
+  platforms: [String!]
+  includedTags: [String!]
+  excludedTags: [String!]
+  probabilityMin: Float
+  probabilityMax: Float
+  spreadMin: Float
+  spreadMax: Float
+  endDateMin: Float
+  endDateMax: Float
+  volume24hMin: Float
+  liquidityMin: Float
+  bookmarked: Boolean
+  withPosition: Boolean
+}
+
+input TraderFiltersInput {
+  search: String
+  platform: Platform
+  ageMin: Float
+  ageMax: Float
+  alphaMin: Float
+  activePositionsMin: Int
+  valueMin: Float
+  valueMax: Float
+  tradeSizeMin: Float
+  tradeSizeMax: Float
+}
+
+input MarketTradeFiltersInput {
+  minSize: Float
+  maxSize: Float
+  side: TradeSide
+}
+
+input MarketBuyInput {
+  externalOutcomeId: String!
+  amount: Float!
+  price: Float
+  orderExecutionType: OrderExecutionType
+}
+
+input MarketSellInput {
+  externalOutcomeId: String!
+  shares: Float!
+  price: Float
+  orderExecutionType: OrderExecutionType
+}
+
+input LimitOrderInput {
+  side: OrderSide!
+  externalOutcomeId: String!
+  price: Float!
+  size: Float!
+  orderExecutionType: OrderExecutionType!
+  expirationSec: Int
+}
+
+input SplitOrderInput {
+  amountMicrodollars: String!
+}
+
+input MergeOrderInput {
+  amountMicrodollars: String!
+}
+
+input ConvertPositionInput {
+  externalOutcomeId: String!
+  size: Float!
+}
+
+input ConvertOrderInput {
+  positions: [ConvertPositionInput!]!
+  amountMicrodollars: String
+}
+
+# oneof-style: exactly one of these should be set.
+input OrderActionInput {
+  marketBuy: MarketBuyInput
+  marketSell: MarketSellInput
+  limit: LimitOrderInput
+  split: SplitOrderInput
+  merge: MergeOrderInput
+  convert: ConvertOrderInput
+}
+
+input PlaceOrderInput {
+  platform: Platform!
+  externalMarketId: String!
+  tradingAccountId: ID!
+  order: OrderActionInput!
+}
+
+input PlaceOrderBatchInput {
+  orders: [PlaceOrderInput!]!
+}
+
+input CancelOrderInput {
+  platform: Platform!
+  externalMarketId: String!
+  platformOrderId: String!
+}
+
+input CancelMarketOrdersInput {
+  platform: Platform!
+  externalMarketId: String!
+}
+
+input CreateAutomatedOrderInput {
+  platform: Platform!
+  externalMarketId: String!
+  externalOutcomeId: String!
+  tradingAccountId: ID!
+  strategyType: StrategyType!
+  side: OrderSide!
+  totalSize: Float!
+  durationSec: Int
+  numLegs: Int
+}
+
+input ClaimPositionInput {
+  platform: Platform!
+  externalMarketId: String!
+  tradingAccountId: ID!
+}
+
+input AddTrackedTraderInput {
+  platform: Platform!
+  platformTraderExternalId: String
+  traderId: ID
+}
+
+input RemoveTrackedTraderInput {
+  platform: Platform!
+  platformTraderExternalId: String
+  traderId: ID
+}
+
+input SetCustomDisplayNameInput {
+  traderId: ID!
+  customDisplayName: String!
+}
+
+input DeleteCustomDisplayNameInput {
+  traderId: ID!
+}
+
+input SaveFilterInput {
+  scope: SavedFilterScope!
+  name: String!
+  filters: JSON!
+}
+
+input BulkFilterInput {
+  scope: SavedFilterScope!
+  name: String!
+  filters: JSON!
+}
+
+input CreateApiKeyInput {
+  name: String!
+  environment: String!
+}
+
+input SetMarketEndDateOverrideInput {
+  marketId: ID!
+  endDate: DateTime!
+}
+
+input TradeTransactionRef {
+  transactionHash: String!
+  platform: Platform!
+  externalMarketId: String
+}
+
+# --------------------------------------------------------------------------- #
+# Query (50 ops + health)
+# --------------------------------------------------------------------------- #
+
+type Query {
+  health: String!
+
+  homeMarkets(limit: Int, sortBy: String, status: MarketStatus, filterInput: MarketFiltersInput): MarketConnection
+  markets(
+    limit: Int
+    offset: Int
+    sortBy: String
+    sortOrder: String
+    search: String
+    filterInput: MarketFiltersInput
+    bookmarked: Boolean
+    marketIds: [ID!]
+  ): MarketConnection
+  market(id: ID, platform: Platform, slug: String): Market
+  event(id: ID!): Event
+  marketStrength(platform: Platform, slug: String, version: Int): MarketStrength
+
+  traders(
+    limit: Int
+    offset: Int
+    sortBy: String
+    sortOrder: String
+    search: String
+    filtersInput: TraderFiltersInput
+  ): TraderConnection
+  trader(id: ID, identifier: String, platform: Platform): BaseTrader
+  resolveTrader(identifier: String!, platform: Platform): BaseTrader
+
+  traderPositions(traderId: ID!, platform: Platform): TraderPositionsResult
+  traderSiblingPositions(traderId: ID!): TraderPositionsResult
+  siblingPositionCounts(traderId: ID!): JSON
+
+  portfolioStats: PortfolioStats
+  openPositions(platform: String, limit: Int, offset: Int): PositionConnection
+  closedPositions(platform: String, limit: Int, offset: Int): PositionConnection
+
+  userOrders(
+    platform: Platform!
+    externalMarketId: String!
+    status: String
+    fetchFromSource: Boolean
+  ): UserOrderConnection
+  polymarketOrders(limit: Int, offset: Int): UserOrderConnection
+  userTrades(marketId: ID, cursor: String): UserTradeConnection
+  userMarketActivity(marketId: ID!): JSON
+
+  orderbookAnalysis(marketId: ID!, hours: Int, minFillCount: Int, limit: Int): OrderbookAnalysis
+  orderbookFills(
+    marketId: ID!
+    traderIds: [String!]!
+    priceCents: Float!
+    side: TradeSide!
+    hours: Int
+  ): OrderbookFills
+
+  kalshiPortfolioStats: KalshiPortfolioStats
+  kalshiBalance: KalshiPortfolioStats
+  kalshiCredentials: KalshiCredentials
+
+  me: Me
+  notifications(limit: Int, cursorCreatedAt: DateTime, cursorId: ID): NotificationConnection
+  savedFilters(scope: SavedFilterScope!): [SavedFilter!]
+  sharedFilter(publicId: String!): SavedFilter
+  tradeCounterparties(transactions: [TradeTransactionRef!]!): [TradeCounterparty!]
+
+  marketRecentTrades(marketId: ID!, before: DateTime, limit: Int, filters: MarketTradeFiltersInput): [BaseTrade!]
+  marketRecentTradesBasic(marketId: ID!, before: DateTime, limit: Int): [BaseTrade!]
+  marketRecentNews(marketId: ID!, start: DateTime, end: DateTime, before: DateTime, limit: Int): [NewsArticle!]
+  marketsForNews(articleId: ID!): [MarketItemListEntry!]
+  marketPositions(marketId: ID!): [MarketPositionGroup!]
+  marketTrackedTraderTrades(marketId: ID!): [BaseTrade!]
+
+  trackedTraders(limit: Int, offset: Int): [TrackedTrader!]
+  trackedTraderTrades(limit: Int, before: DateTime): [BaseTrade!]
+
+  marketBookmarks: [ID!]
+  bookmarkedMarkets(limit: Int, offset: Int): MarketConnection
+  recentMarkets(limit: Int): MarketConnection
+  marketCalendar(start: DateTime, end: DateTime): [Market!]
+
+  tags(search: String, requiredSlugs: [String!]): [Tag!]
+  walletBalance: WalletBalance
+  apiKeys: [ApiKey!]
+  polymarketOrderFillStatus(platformOrderId: String!): JSON
+  automatedOrders(limit: Int, offset: Int): [AutomatedOrder!]
+  umaResolution(conditionId: String!): UmaResolution
+  platformComments(platform: Platform!, externalId: String!, limit: Int, offset: Int): [PlatformComment!]
+  adminMarket(id: ID!): Market
+  inviteCodePreview(code: String!): InviteCodePreview
+}
+
+# --------------------------------------------------------------------------- #
+# Mutation (29 ops)
+# --------------------------------------------------------------------------- #
+
+type Mutation {
+  placeOrder(input: PlaceOrderInput!): IOrderPlacement
+  placeSplitOrder(input: PlaceOrderInput!): IOrderPlacement
+  placeMergeOrder(input: PlaceOrderInput!): IOrderPlacement
+  placeConvertOrder(input: PlaceOrderInput!): IOrderPlacement
+  placeOrderBatch(input: PlaceOrderBatchInput!): OrderBatchResult
+  cancelOrder(input: CancelOrderInput!): CancelOrderResult
+  cancelMarketOrders(input: CancelMarketOrdersInput!): CancelMarketOrdersResult
+  createAutomatedOrder(input: CreateAutomatedOrderInput!): AutomatedOrder
+  cancelAutomatedOrder(id: ID!): AutomatedOrder
+  claimPosition(input: ClaimPositionInput!): ClaimPositionResult
+
+  bookmarkMarket(marketId: ID!): Boolean
+  unbookmarkMarket(marketId: ID!): Boolean
+  addTrackedTrader(input: AddTrackedTraderInput!): Boolean
+  removeTrackedTrader(input: RemoveTrackedTraderInput!): Boolean
+  syncTraderPositions(traderId: ID!): SyncMeta
+
+  setCustomDisplayName(input: SetCustomDisplayNameInput!): Boolean
+  deleteCustomDisplayName(input: DeleteCustomDisplayNameInput!): Boolean
+
+  saveFilter(input: SaveFilterInput!): SavedFilter
+  deleteSavedFilter(scope: SavedFilterScope!, name: String!): Boolean
+  bulkSaveFilters(filters: [BulkFilterInput!]!): BulkSaveFiltersResult
+  shareSavedFilter(scope: SavedFilterScope!, name: String!): SavedFilter
+  importSharedFilter(publicId: String!): ImportSharedFilterResult
+
+  markNotificationRead(id: ID!): Boolean
+  markAllNotificationsRead: Boolean
+
+  createApiKey(input: CreateApiKeyInput!): CreateApiKeyResult
+  revokeApiKey(id: ID!): Boolean
+  deleteKalshiCredentials: Boolean
+  syncTosFromPrivy(acceptTos: Boolean): Me
+  setMarketEndDateOverride(input: SetMarketEndDateOverrideInput!): Market
+}
+
+# --------------------------------------------------------------------------- #
+# Subscription (6 ops)
+# --------------------------------------------------------------------------- #
+
+type Subscription {
+  marketStats(marketId: ID!): MarketOutcome
+  marketNews(marketId: ID!): NewsArticle
+  marketTrades(marketId: ID!): BaseTrade
+  multiMarketTrades(marketIds: [ID!]!): BaseTrade
+  trackedTraderTrades: BaseTrade
+  userNotifications: Notification
+}

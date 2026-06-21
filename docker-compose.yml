@@ -1,0 +1,70 @@
+# Caesar Phase 0 dev infra — Postgres + Redis + Temporal dev server.
+# Loopback-bound (matches biggie's "nginx fronts everything" posture).
+# Local/dev only in Phase 0; the production worker fleet is Phase 3.
+name: caesar
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: caesar
+      POSTGRES_PASSWORD: caesar
+      POSTGRES_DB: caesar
+    # Host port remapped off the default 5432 to coexist with other stacks on
+    # biggie (n8n/supabase already bind 5432). Container port stays 5432.
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caesar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Temporal dev server (in-memory + SQLite). Good enough for Phase 0/dev.
+  # Swap for the full postgres-backed cluster (or Temporal Cloud) before prod.
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: caesar
+      POSTGRES_PWD: caesar
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "127.0.0.1:57233:7233"
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "127.0.0.1:58233:8080"
+
+volumes:
+  pgdata:
+  redisdata:

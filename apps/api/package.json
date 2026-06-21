@@ -1,0 +1,39 @@
+{
+  "name": "@caesar/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/server.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src spikes",
+    "spike:polymarket": "node --env-file-if-exists=../../.env --import tsx spikes/polymarket-sign.ts",
+    "spike:kalshi": "node --env-file-if-exists=../../.env --import tsx spikes/kalshi-sign.ts",
+    "spike:privy": "node --env-file-if-exists=../../.env --import tsx spikes/privy-verify.ts"
+  },
+  "dependencies": {
+    "@caesar/chain": "workspace:*",
+    "@caesar/config": "workspace:*",
+    "@caesar/db": "workspace:*",
+    "@caesar/graphql-schema": "workspace:*",
+    "@caesar/money": "workspace:*",
+    "@polymarket/clob-client": "^4.0.0",
+    "@polymarket/order-utils": "^2.0.0",
+    "@privy-io/server-auth": "^1.20.0",
+    "decimal.js": "^10.4.3",
+    "drizzle-orm": "^0.38.3",
+    "ethers": "^5.7.2",
+    "fastify": "^5.2.0",
+    "graphql": "^16.10.0",
+    "graphql-yoga": "^5.10.4",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "viem": "^2.21.55",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2"
+  }
+}

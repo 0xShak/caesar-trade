@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="parity:allow_trades" content="false" />
+    <title>Caesar Terminal</title>
+    <!--
+      Pre-paint theme application (bible §11): read the saved theme from
+      localStorage and set data-theme BEFORE first paint to avoid a flash.
+      Themes: dark, dark-hc, light, light-hc, dusk.
+    -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("caesar-theme");
+          var valid = ["dark", "dark-hc", "light", "light-hc", "dusk"];
+          document.documentElement.setAttribute(
+            "data-theme",
+            valid.indexOf(t) !== -1 ? t : "dark",
+          );
+        } catch (e) {
+          /* localStorage unavailable — keep default */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

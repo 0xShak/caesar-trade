@@ -1,0 +1,26 @@
+# deps / build
+node_modules/
+dist/
+.turbo/
+*.tsbuildinfo
+
+# env & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.keystore
+keystore/
+wallets/
+secrets/
+
+# editor / os
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# generated
+apps/web/src/gql/generated/
+coverage/
