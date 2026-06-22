@@ -6,21 +6,14 @@ import { toast } from "sonner";
 import { formatEther, type Address, type Hex, type TypedDataDefinition } from "viem";
 import {
   POLYGON_CHAIN_ID,
-  OrderSide,
-  SignatureType,
   COLLATERAL_PUSD_V2,
   buildClobAuthTypedData,
-  buildV2LimitOrder,
-  buildType3OrderTypedData,
-  assembleType3OrderSignature,
   buildErc20TransferCall,
   buildDepositWalletApprovalCalls,
   buildDepositWalletBatchTypedData,
   assembleSafeTx,
   buildSafeTxTypedData,
   encodeExecTransaction,
-  exchangeContractFor,
-  generateOrderSalt,
 } from "@caesar/chain";
 import {
   POLYMARKET_ACCOUNT_STATE,
@@ -28,12 +21,9 @@ import {
   CREATE_DEPOSIT_WALLET,
   SUBMIT_DEPOSIT_WALLET_APPROVALS,
   DERIVE_POLYMARKET_CREDENTIALS,
-  PREPARE_POLYMARKET_ORDER,
-  PREPARE_POLYMARKET_CANCEL,
 } from "@/gql/wallet";
 import { useTradingWallet } from "@/lib/tradingWallet";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+import { errMsg } from "@/lib/orders";
 
 /** Client-side mainnet gate — mirrors the server CAESAR_ENABLE_MAINNET_TRADING.
  *  Live setup/trading buttons only render when this is explicitly "true". */
@@ -299,8 +289,10 @@ export function PortfolioPage() {
               <span>{complete ? "ready to trade" : tradeReady ? "ready (fund deposit wallet to trade)" : "incomplete"}</span>
             </div>
 
-            {tradeReady && MAINNET && deposit && acct?.signerAddress && (
-              <OrderTicket depositWallet={deposit} sign={wallet.signTypedData} />
+            {tradeReady && (
+              <p className="page-meta" style={{ marginTop: 8 }}>
+                Wallet ready — place orders from any market page.
+              </p>
             )}
           </>
         )}
@@ -311,218 +303,6 @@ export function PortfolioPage() {
 
 function fmtUsd(v: number | null | undefined): string {
   return v == null ? "—" : `$${v.toFixed(2)}`;
-}
-
-interface PreparedClobRequest {
-  success: boolean;
-  error?: string | null;
-  url?: string | null;
-  method?: string | null;
-  headers?: Array<{ name: string; value: string }> | null;
-  body?: string | null;
-}
-
-/**
- * Execute a server-prepared CLOB request directly from the browser (so the POST
- * comes from the user's IP, dodging the server's geoblock). Parses the CLOB
- * response into {id, status} or throws with the API error text.
- */
-async function sendPreparedToClob(
-  p: PreparedClobRequest | null | undefined,
-): Promise<{ id: string | null; status: string | null }> {
-  if (!p?.success) throw new Error(p?.error ?? "request preparation failed");
-  if (!p.url || !p.method) throw new Error("incomplete prepared request");
-  const headers = Object.fromEntries((p.headers ?? []).map((h) => [h.name, h.value] as const));
-  const resp = await fetch(p.url, { method: p.method, headers, body: p.body ?? undefined });
-  const text = await resp.text();
-  let parsed: unknown = text;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    /* keep raw text */
-  }
-  const b = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
-  const errText =
-    (b.error as string | undefined) ??
-    (b.errorMsg as string | undefined) ??
-    (typeof parsed === "string" && parsed ? parsed : undefined);
-  if (!resp.ok || errText) throw new Error(errText ?? `CLOB HTTP ${resp.status}`);
-  const id = (b.orderID ?? b.orderId ?? b.id ?? null) as string | null;
-  const status = (b.status ?? (b.success === true ? "accepted" : null)) as string | null;
-  return { id, status };
-}
-
-interface OrderTicketProps {
-  depositWallet: Address;
-  sign: (td: TypedDataDefinition) => Promise<Hex>;
-}
-
-/**
- * Browser-signed type-3 order ticket. Builds a V2 LIMIT order with maker == signer
- * == the deposit wallet (signatureType 3 / POLY_1271), signs the ERC-7739 nested
- * EIP-712 with the embedded EOA, assembles the on-chain ERC-1271 signature, and
- * submits via the gated browser-submit path. Defaults to a tiny resting BUY far
- * from any mid so the first live order rests (and can be canceled) rather than
- * filling. Paste a market's YES/NO clobTokenId to target it.
- */
-function OrderTicket({ depositWallet, sign }: OrderTicketProps) {
-  const [tokenId, setTokenId] = useState("");
-  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
-  const [price, setPrice] = useState("0.02");
-  const [size, setSize] = useState("5");
-  const [orderType, setOrderType] = useState<"GTC" | "FOK">("GTC");
-  const [negRisk, setNegRisk] = useState(false);
-  const [busy, setBusy] = useState<null | "submit" | "cancel">(null);
-  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
-
-  const [prepareOrder] = useMutation(PREPARE_POLYMARKET_ORDER);
-  const [prepareCancel] = useMutation(PREPARE_POLYMARKET_CANCEL);
-
-  const notional = (Number(price) || 0) * (Number(size) || 0);
-
-  async function onSubmit() {
-    if (!tokenId.trim()) {
-      toast.error("Enter the outcome's clobTokenId.");
-      return;
-    }
-    setBusy("submit");
-    try {
-      const salt = generateOrderSalt(Math.random(), Date.now());
-      const timestamp = BigInt(Math.floor(Date.now() / 1000));
-      // Type-3: maker == signer == deposit wallet.
-      const order = buildV2LimitOrder({
-        funder: depositWallet,
-        signer: depositWallet,
-        tokenId: BigInt(tokenId.trim()),
-        side: side === "BUY" ? OrderSide.BUY : OrderSide.SELL,
-        signatureType: SignatureType.POLY_1271,
-        salt,
-        timestamp,
-        price: Number(price),
-        size: Number(size),
-        tickSize: "0.01",
-      });
-      const exchange = exchangeContractFor(POLYGON_CHAIN_ID, negRisk);
-      // Sign the ERC-7739 TypedDataSign with the embedded EOA (the wallet owner)…
-      const td = buildType3OrderTypedData(
-        order,
-        POLYGON_CHAIN_ID,
-        exchange,
-        depositWallet,
-      ) as unknown as TypedDataDefinition;
-      const innerSig = await sign(td);
-      // …then assemble the on-chain ERC-1271 signature the exchange validates.
-      const signature = assembleType3OrderSignature({
-        order,
-        innerSignature: innerSig,
-        chainId: POLYGON_CHAIN_ID,
-        exchange,
-      });
-      const res = await prepareOrder({
-        variables: {
-          input: {
-            salt: order.salt.toString(),
-            maker: order.maker,
-            signer: order.signer,
-            taker: ZERO_ADDRESS,
-            tokenId: order.tokenId.toString(),
-            makerAmount: order.makerAmount.toString(),
-            takerAmount: order.takerAmount.toString(),
-            side,
-            signatureType: order.signatureType,
-            timestamp: order.timestamp.toString(),
-            metadata: order.metadata,
-            builder: order.builder,
-            expiration: "0",
-            signature,
-            orderType,
-            negRisk,
-          },
-        },
-      });
-      const { id, status } = await sendPreparedToClob(res.data?.preparePolymarketOrder);
-      setLastOrderId(id);
-      toast.success(`Order ${status ?? "accepted"}${id ? ` — ${id.slice(0, 10)}…` : ""}`);
-    } catch (err) {
-      toast.error(`Order failed: ${errMsg(err)}`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function onCancel() {
-    if (!lastOrderId) return;
-    setBusy("cancel");
-    try {
-      const res = await prepareCancel({ variables: { orderId: lastOrderId } });
-      await sendPreparedToClob(res.data?.preparePolymarketCancel);
-      toast.success("Order canceled.");
-      setLastOrderId(null);
-    } catch (err) {
-      toast.error(`Cancel failed: ${errMsg(err)}`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <div className="order-ticket" style={{ marginTop: 16, borderTop: "1px solid var(--border, #333)", paddingTop: 12 }}>
-      <div className="spike-row">
-        <span className="pill">order ticket</span>
-        <span className="page-meta">browser-signed · type-3 · ~${notional.toFixed(2)} notional</span>
-      </div>
-      <div style={{ display: "grid", gap: 8, maxWidth: 520, marginTop: 8 }}>
-        <label style={{ display: "grid", gap: 2 }}>
-          <span className="page-meta">clobTokenId (outcome)</span>
-          <input value={tokenId} onChange={(e) => setTokenId(e.target.value)} placeholder="e.g. 7138…" />
-        </label>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <label style={{ display: "grid", gap: 2 }}>
-            <span className="page-meta">side</span>
-            <select value={side} onChange={(e) => setSide(e.target.value as "BUY" | "SELL")}>
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-            </select>
-          </label>
-          <label style={{ display: "grid", gap: 2 }}>
-            <span className="page-meta">price (0–1)</span>
-            <input value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 90 }} />
-          </label>
-          <label style={{ display: "grid", gap: 2 }}>
-            <span className="page-meta">size (shares)</span>
-            <input value={size} onChange={(e) => setSize(e.target.value)} style={{ width: 90 }} />
-          </label>
-          <label style={{ display: "grid", gap: 2 }}>
-            <span className="page-meta">type</span>
-            <select value={orderType} onChange={(e) => setOrderType(e.target.value as "GTC" | "FOK")}>
-              <option value="GTC">GTC (rest)</option>
-              <option value="FOK">FOK (fill)</option>
-            </select>
-          </label>
-          <label style={{ display: "flex", alignItems: "end", gap: 4 }}>
-            <input type="checkbox" checked={negRisk} onChange={(e) => setNegRisk(e.target.checked)} />
-            <span className="page-meta">neg-risk market</span>
-          </label>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" disabled={busy !== null} onClick={onSubmit}>
-            {busy === "submit" ? <Loader2 size={14} className="spin" /> : null} Sign &amp; submit order
-          </button>
-          {lastOrderId && (
-            <button className="btn" disabled={busy !== null} onClick={onCancel}>
-              {busy === "cancel" ? <Loader2 size={14} className="spin" /> : null} Cancel last order
-            </button>
-          )}
-        </div>
-        {lastOrderId && <span className="page-meta">resting order: {lastOrderId}</span>}
-      </div>
-    </div>
-  );
-}
-
-function errMsg(err: unknown): string {
-  const m = err instanceof Error ? err.message : String(err);
-  return m.length > 140 ? m.slice(0, 140) + "…" : m;
 }
 
 /** Poll `check` until it resolves true (or give up after ~60s). */
