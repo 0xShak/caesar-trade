@@ -1,6 +1,8 @@
 import process from "node:process";
 import Fastify from "fastify";
 import { createYoga } from "graphql-yoga";
+import { WebSocketServer } from "ws";
+import { useServer } from "graphql-ws/use/ws";
 import { PrivyClient } from "@privy-io/server-auth";
 import { loadEnv } from "@caesar/config";
 import { schema } from "./schema.js";
@@ -80,7 +82,17 @@ app.get("/health", async () => ({ ok: true }));
 
 app
   .listen({ port: PORT, host: "127.0.0.1" })
-  .then(() => app.log.info(`Caesar API listening — GraphQL at http://localhost:${PORT}/graphql`))
+  .then(() => {
+    app.log.info(`Caesar API listening — GraphQL at http://localhost:${PORT}/graphql`);
+
+    // Phase 4 realtime — attach a graphql-ws WebSocket server to Fastify's
+    // underlying Node HTTP server. HTTP-upgrade requests at /graphql are handled
+    // here; ordinary POST/GET still flow through the Yoga HTTP bridge above, so
+    // both transports share the one /graphql path.
+    const wss = new WebSocketServer({ server: app.server, path: "/graphql" });
+    useServer({ schema }, wss);
+    app.log.info("GraphQL subscriptions (graphql-ws) on ws://localhost:4000/graphql");
+  })
   .catch((err: unknown) => {
     app.log.error(err);
     process.exit(1);

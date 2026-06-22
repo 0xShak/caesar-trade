@@ -17,6 +17,7 @@ import {
   type MarketRecentTradesArgs,
   type MarketPositionsArgs,
 } from "./trades.js";
+import { subscriptionResolvers } from "./subscriptions.js";
 
 /**
  * Phase 1 resolvers. The market read paths (markets, homeMarkets, market, event,
@@ -33,6 +34,8 @@ export const resolvers = {
   // a __resolveType so GraphQL can pick the object type at runtime.
   ITrader: { __resolveType: () => "BaseTrader" },
   ITrade: { __resolveType: () => "BaseTrade" },
+
+  Subscription: subscriptionResolvers,
 
   Query: {
     health: () => "ok",
