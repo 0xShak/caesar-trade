@@ -71,6 +71,9 @@ export const INFRA = {
   proxyFactory: "0xaB45c5A4B0c941a2F231C04C3f49182e1A254052",
   depositWalletFactory: "0x00000000000Fb5C9ADea0298D729A0CB3823Cc07",
   relayHub: "0xD216153c06E857cD7f72665E0aF1d7D82172F494",
+  // Gnosis MultiSend 1.3.0 (delegatecall) — batches all approval calls into one
+  // Safe execTransaction. Confirmed from Polymarket builder-relayer-client config.
+  multiSend: "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761",
   zeroAddress: "0x0000000000000000000000000000000000000000",
 } as const satisfies Record<string, Address>;
 
