@@ -1386,3 +1386,28 @@ type Subscription {
   trackedTraderTrades: BaseTrade
   userNotifications: Notification
 }
+
+# --------------------------------------------------------------------------- #
+# Caesar extension — browser-signed wallet setup + trading (not in Parity SDL)
+#
+# The Privy embedded wallet signs in-browser (deploy/approval/ClobAuth/order);
+# the server only reads chain state, derives+stores per-user CLOB creds, and
+# submits signed orders with L2 HMAC. See docs/PHASE3-LIVE-TRADING.md.
+# --------------------------------------------------------------------------- #
+
+# Live on-chain readiness of the user's derived Safe (ground truth, not DB flags).
+type PolymarketAccountState {
+  signerAddress: String
+  safeAddress: String
+  isDeployed: Boolean!
+  hasV2Approvals: Boolean!
+  hasApiCredentials: Boolean!
+  # Embedded EOA gas balance (wei, stringified) — must be > 0 to self-submit setup txs.
+  signerMaticWei: String
+  pUsdBalance: Float
+  usdceBalance: Float
+}
+
+extend type Query {
+  polymarketAccountState: PolymarketAccountState
+}

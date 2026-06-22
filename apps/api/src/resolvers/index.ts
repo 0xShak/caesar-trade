@@ -31,7 +31,7 @@ import { subscriptionResolvers } from "./subscriptions.js";
 import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
 import { resolveMarketOrderbook } from "./orderbook.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
-import { resolveWalletBalance } from "./portfolio.js";
+import { resolveWalletBalance, resolvePolymarketAccountState } from "./portfolio.js";
 import {
   resolvePlaceOrder,
   resolvePlaceSplitOrder,
@@ -109,6 +109,10 @@ export const resolvers = {
     // Track 1: on-chain pUSD/USDC.e balances of the user's derived Safe.
     walletBalance: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
       resolveWalletBalance(ctx),
+
+    // Caesar: live trading-readiness (deployed / approvals / creds / gas).
+    polymarketAccountState: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolvePolymarketAccountState(ctx),
   },
 
   Mutation: {
