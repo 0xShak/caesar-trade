@@ -5,6 +5,10 @@ import { defineConfig } from "vite";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Load env (incl. VITE_* like VITE_PRIVY_APP_ID) from the monorepo root, the
+  // single source of truth the api also reads. Without this, Vite defaults
+  // envDir to apps/web/ and never sees the root .env → empty appId → blank page.
+  envDir: fileURLToPath(new URL("../../", import.meta.url)),
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

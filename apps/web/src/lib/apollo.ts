@@ -5,6 +5,7 @@ import {
   InMemoryCache,
   split,
 } from "@apollo/client";
+import { setContext } from "@apollo/client/link/context";
 import { GraphQLWsLink } from "@apollo/client/link/subscriptions";
 import { getMainDefinition } from "@apollo/client/utilities";
 import { createClient } from "graphql-ws";
@@ -12,19 +13,22 @@ import { createClient } from "graphql-ws";
 /**
  * Auth token getter (bible §6 headers).
  *
- * TODO(next session): wire this to Privy — return the cached Privy access
- * token + identity token so the auth link can attach them. For now it returns
- * undefined so unauthenticated GraphQL reads still work.
+ * The getter is **async** and resolved at request time: Privy's
+ * `getAccessToken()` is async, so caching it and racing a refetch dropped the
+ * token on the first authed query (it fired the instant `authenticated` flipped,
+ * before the token was cached). Awaiting per-request removes that race entirely —
+ * Privy caches/refreshes the token internally, so calling it each request is cheap.
+ * Returns empty tokens when logged out, so public reads still work.
  */
 export type AuthTokens = {
   accessToken?: string;
   identityToken?: string;
 };
 
-let getAuthTokens: () => AuthTokens = () => ({});
+let getAuthTokens: () => Promise<AuthTokens> = async () => ({});
 
 /** Allows the Privy layer to register a live token getter once authenticated. */
-export function setAuthTokenGetter(getter: () => AuthTokens): void {
+export function setAuthTokenGetter(getter: () => Promise<AuthTokens>): void {
   getAuthTokens = getter;
 }
 
@@ -61,8 +65,8 @@ const wsLink = new GraphQLWsLink(
     // are active and retry on transient drops so the live tape self-heals.
     lazy: true,
     retryAttempts: 10,
-    connectionParams: () => {
-      const { accessToken, identityToken } = getAuthTokens();
+    connectionParams: async () => {
+      const { accessToken, identityToken } = await getAuthTokens();
       const params: Record<string, string> = {};
       if (accessToken) params["authorization"] = `Bearer ${accessToken}`;
       if (identityToken) params["privy-id-token"] = identityToken;
@@ -71,20 +75,15 @@ const wsLink = new GraphQLWsLink(
   }),
 );
 
-const authLink = new ApolloLink((operation, forward) => {
-  const { accessToken, identityToken } = getAuthTokens();
-
-  operation.setContext(({ headers = {} }: { headers?: Record<string, string> }) => {
-    const next: Record<string, string> = {
-      ...headers,
-      "x-graphql-operation": operation.operationName ?? "anonymous",
-    };
-    if (accessToken) next["Authorization"] = `Bearer ${accessToken}`;
-    if (identityToken) next["privy-id-token"] = identityToken;
-    return { headers: next };
-  });
-
-  return forward(operation);
+const authLink = setContext(async (operation, { headers = {} }) => {
+  const { accessToken, identityToken } = await getAuthTokens();
+  const next: Record<string, string> = {
+    ...(headers as Record<string, string>),
+    "x-graphql-operation": operation.operationName ?? "anonymous",
+  };
+  if (accessToken) next["Authorization"] = `Bearer ${accessToken}`;
+  if (identityToken) next["privy-id-token"] = identityToken;
+  return { headers: next };
 });
 
 /**

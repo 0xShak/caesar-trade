@@ -4,44 +4,42 @@ import { usePrivy, useIdentityToken } from "@privy-io/react-auth";
 import { setAuthTokenGetter } from "@/lib/apollo";
 
 /**
- * Bridges Privy auth → Apollo (bible §6 auth headers). Apollo's auth link reads
- * tokens synchronously, but Privy's `getAccessToken()` is async — so we keep a
- * module-level cache that this component refreshes on auth-state changes, and
- * register a synchronous getter that reads the cache. The identity token comes
- * from `useIdentityToken()` (already a sync string, refreshed by the SDK).
+ * Bridges Privy auth → Apollo (bible §6 auth headers). The Apollo auth link
+ * resolves tokens **per request** (async), so this component just keeps the
+ * live `getAccessToken` fn + identity token in a module ref and registers an
+ * async getter the link awaits. Fetching at request time (rather than caching +
+ * racing a refetch) means the first authed query never goes out token-less.
  *
- * On login/logout transitions we also reset the Apollo store so `me` (and any
- * other auth-scoped queries) refetch with the new identity.
+ * On login/logout transitions we refetch auth-scoped queries so `me` reloads
+ * under the new identity.
  */
-let cache: { accessToken?: string; identityToken?: string } = {};
-setAuthTokenGetter(() => cache);
+let liveGetAccessToken: (() => Promise<string | null>) | null = null;
+let identityTokenRef: string | undefined;
+
+setAuthTokenGetter(async () => {
+  const accessToken = liveGetAccessToken ? await liveGetAccessToken() : null;
+  return { accessToken: accessToken ?? undefined, identityToken: identityTokenRef };
+});
 
 export function PrivyAuthBridge() {
   const { ready, authenticated, getAccessToken } = usePrivy();
   const { identityToken } = useIdentityToken();
   const apollo = useApolloClient();
 
-  useEffect(() => {
-    cache = { ...cache, identityToken: identityToken ?? undefined };
-  }, [identityToken]);
+  // Assign synchronously in render (not an effect): this component is mounted
+  // before <App>, so it renders first in the commit where `authenticated` flips
+  // true — making the token getter live BEFORE AccountMenu/TosGate's GetMe
+  // useQuery dispatches in that same commit. An effect would run too late and
+  // the first authed query would go out token-less.
+  liveGetAccessToken = ready && authenticated ? getAccessToken : null;
+  identityTokenRef = identityToken ?? undefined;
 
   useEffect(() => {
-    let cancelled = false;
-    if (ready && authenticated) {
-      void getAccessToken().then((token) => {
-        if (cancelled) return;
-        cache = { ...cache, accessToken: token ?? undefined };
-        // Tokens are now attached — refetch auth-scoped queries (me, …).
-        void apollo.refetchQueries({ include: ["GetMe"] });
-      });
-    } else if (ready && !authenticated) {
-      cache = {};
-      void apollo.refetchQueries({ include: ["GetMe"] });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, authenticated, getAccessToken, apollo]);
+    // Belt-and-suspenders on login/logout: reload active observable queries so
+    // `me` reflects the new identity. reFetchObservableQueries (vs refetchQueries
+    // by name) never throws when no query is currently active.
+    void apollo.reFetchObservableQueries();
+  }, [authenticated, apollo]);
 
   return null;
 }

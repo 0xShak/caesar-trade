@@ -25,6 +25,31 @@ if (!rootEl) {
   throw new Error("#root element not found");
 }
 
+// Fail loud: PrivyProvider throws on an empty appId, which would blank the whole
+// page with no hint. Render a visible diagnostic instead so the cause is obvious.
+if (!PRIVY_APP_ID) {
+  createRoot(rootEl).render(
+    <div
+      style={{
+        padding: "2rem",
+        fontFamily: "var(--font-mono, monospace)",
+        color: "#fca5a5",
+        maxWidth: "42rem",
+        margin: "0 auto",
+      }}
+    >
+      <h1 style={{ fontSize: "1.1rem" }}>Caesar Terminal — config error</h1>
+      <p>
+        <code>VITE_PRIVY_APP_ID</code> is not set, so the Privy auth provider
+        cannot initialize. Set it in the monorepo-root <code>.env</code> and
+        restart the dev server (Vite inlines env at boot; HMR won&apos;t pick it
+        up).
+      </p>
+    </div>,
+  );
+  throw new Error("VITE_PRIVY_APP_ID is empty — see the page for details");
+}
+
 createRoot(rootEl).render(
   <StrictMode>
     <PrivyProvider
