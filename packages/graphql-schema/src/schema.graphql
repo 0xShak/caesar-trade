@@ -1419,6 +1419,48 @@ extend type Query {
   polymarketAccountState: PolymarketAccountState
   # Current Batch nonce for the user's deposit wallet (browser signs the Batch with it).
   depositWalletNonce: String
+  # Live positions held by the user's deposit wallet (Polymarket data-api).
+  polymarketPositions: [PolymarketPosition!]
+  # The user's resting (open) orders on the CLOB (GET /data/orders).
+  polymarketOpenOrders: [PolymarketOpenOrder!]
+}
+
+# A position held by the user's CLOB V2 deposit wallet (Polymarket data-api).
+# Values are dollars; avgPrice/curPrice are probabilities 0..1.
+type PolymarketPosition {
+  # ERC-1155 token id of the outcome (= clobTokenId / externalOutcomeId).
+  asset: String!
+  conditionId: String
+  title: String
+  outcome: String
+  size: Float
+  avgPrice: Float
+  curPrice: Float
+  initialValue: Float
+  currentValue: Float
+  cashPnl: Float
+  percentPnl: Float
+  redeemable: Boolean
+}
+
+# A resting (open) order on the CLOB for the authenticated user. price is a
+# probability 0..1; sizes are share counts.
+type PolymarketOpenOrder {
+  # CLOB order id (the order hash) — pass to preparePolymarketCancel to cancel.
+  id: String!
+  status: String
+  conditionId: String
+  # ERC-1155 token id of the outcome (= clobTokenId / externalOutcomeId).
+  assetId: String
+  outcome: String
+  side: String
+  price: Float
+  originalSize: Float
+  sizeMatched: Float
+  sizeRemaining: Float
+  orderType: String
+  # Unix-seconds string of when the order was created.
+  createdAt: String
 }
 
 # Relayer-driven, gasless deposit-wallet creation (deterministic from the EOA).

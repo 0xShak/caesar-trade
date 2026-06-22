@@ -21,9 +21,12 @@ import {
   CREATE_DEPOSIT_WALLET,
   SUBMIT_DEPOSIT_WALLET_APPROVALS,
   DERIVE_POLYMARKET_CREDENTIALS,
+  POLYMARKET_POSITIONS,
+  POLYMARKET_OPEN_ORDERS,
+  PREPARE_POLYMARKET_CANCEL,
 } from "@/gql/wallet";
 import { useTradingWallet } from "@/lib/tradingWallet";
-import { errMsg } from "@/lib/orders";
+import { errMsg, sendPreparedToClob } from "@/lib/orders";
 
 /** Client-side mainnet gate — mirrors the server CAESAR_ENABLE_MAINNET_TRADING.
  *  Live setup/trading buttons only render when this is explicitly "true". */
@@ -290,9 +293,13 @@ export function PortfolioPage() {
             </div>
 
             {tradeReady && (
-              <p className="page-meta" style={{ marginTop: 8 }}>
-                Wallet ready — place orders from any market page.
-              </p>
+              <>
+                <p className="page-meta" style={{ marginTop: 8 }}>
+                  Wallet ready — place orders from any market page.
+                </p>
+                <PositionsPanel />
+                <OpenOrdersPanel />
+              </>
             )}
           </>
         )}
@@ -303,6 +310,187 @@ export function PortfolioPage() {
 
 function fmtUsd(v: number | null | undefined): string {
   return v == null ? "—" : `$${v.toFixed(2)}`;
+}
+
+/** 0..1 probability → cents string, e.g. 0.47 → "47.0¢". */
+function fmtCents(v: number | null | undefined): string {
+  return v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}¢`;
+}
+
+/** Signed dollar P&L with a sign, e.g. -$1.20 / +$3.40. */
+function fmtPnl(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  const s = v < 0 ? "-" : "+";
+  return `${s}$${Math.abs(v).toFixed(2)}`;
+}
+
+interface PolyPosition {
+  asset: string;
+  conditionId: string | null;
+  title: string | null;
+  outcome: string | null;
+  size: number | null;
+  avgPrice: number | null;
+  curPrice: number | null;
+  initialValue: number | null;
+  currentValue: number | null;
+  cashPnl: number | null;
+  percentPnl: number | null;
+  redeemable: boolean | null;
+}
+
+/** Live positions held by the deposit wallet (read from the Polymarket data-api). */
+function PositionsPanel() {
+  const { data, loading } = useQuery<{ polymarketPositions: PolyPosition[] | null }>(
+    POLYMARKET_POSITIONS,
+    { pollInterval: 20000 },
+  );
+  const positions = data?.polymarketPositions ?? [];
+
+  return (
+    <section className="detail-section" style={{ marginTop: 16 }}>
+      <div className="detail-section-title">Positions</div>
+      {loading && !data ? (
+        <div className="state-msg">Loading positions…</div>
+      ) : positions.length === 0 ? (
+        <div className="state-msg">No open positions.</div>
+      ) : (
+        <table className="mono-table">
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th>Outcome</th>
+              <th className="num">Size</th>
+              <th className="num">Avg</th>
+              <th className="num">Cur</th>
+              <th className="num">Value</th>
+              <th className="num">P&amp;L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((p) => (
+              <tr key={p.asset}>
+                <td title={p.title ?? undefined}>{p.title ?? truncMid(p.conditionId)}</td>
+                <td>{p.outcome ?? "—"}</td>
+                <td className="num">{p.size != null ? p.size.toLocaleString() : "—"}</td>
+                <td className="num">{fmtCents(p.avgPrice)}</td>
+                <td className="num">{fmtCents(p.curPrice)}</td>
+                <td className="num">{fmtUsd(p.currentValue)}</td>
+                <td className={`num ${pnlClass(p.cashPnl)}`}>{fmtPnl(p.cashPnl)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+interface PolyOpenOrder {
+  id: string;
+  status: string | null;
+  conditionId: string | null;
+  assetId: string | null;
+  outcome: string | null;
+  side: string | null;
+  price: number | null;
+  originalSize: number | null;
+  sizeMatched: number | null;
+  sizeRemaining: number | null;
+  orderType: string | null;
+  createdAt: string | null;
+}
+
+/** The user's resting CLOB orders, with a per-row cancel (browser-submitted). */
+function OpenOrdersPanel() {
+  const { data, loading, refetch } = useQuery<{ polymarketOpenOrders: PolyOpenOrder[] | null }>(
+    POLYMARKET_OPEN_ORDERS,
+    { pollInterval: 15000 },
+  );
+  const [prepareCancel] = useMutation(PREPARE_POLYMARKET_CANCEL);
+  const [canceling, setCanceling] = useState<string | null>(null);
+  const orders = data?.polymarketOpenOrders ?? [];
+
+  async function cancel(id: string) {
+    setCanceling(id);
+    try {
+      const res = await prepareCancel({ variables: { orderId: id } });
+      await sendPreparedToClob(res.data?.preparePolymarketCancel);
+      toast.success("Order canceled.");
+      await refetch();
+    } catch (err) {
+      toast.error(`Cancel failed: ${errMsg(err)}`);
+    } finally {
+      setCanceling(null);
+    }
+  }
+
+  return (
+    <section className="detail-section" style={{ marginTop: 16 }}>
+      <div className="detail-section-title">Open orders</div>
+      {loading && !data ? (
+        <div className="state-msg">Loading orders…</div>
+      ) : orders.length === 0 ? (
+        <div className="state-msg">No resting orders.</div>
+      ) : (
+        <table className="mono-table">
+          <thead>
+            <tr>
+              <th>Side</th>
+              <th>Outcome</th>
+              <th className="num">Price</th>
+              <th className="num">Filled</th>
+              <th className="num">Size</th>
+              <th>Type</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((o) => (
+              <tr key={o.id}>
+                <td>
+                  <span className={o.side === "SELL" ? "pill state-err" : "pill platform-kalshi"}>
+                    {o.side ?? "—"}
+                  </span>
+                </td>
+                <td title={o.assetId ?? undefined}>{o.outcome ?? "—"}</td>
+                <td className="num">{fmtCents(o.price)}</td>
+                <td className="num">
+                  {o.sizeMatched != null && o.originalSize != null
+                    ? `${o.sizeMatched}/${o.originalSize}`
+                    : "—"}
+                </td>
+                <td className="num">
+                  {o.sizeRemaining != null ? o.sizeRemaining.toLocaleString() : "—"}
+                </td>
+                <td>{o.orderType ?? "—"}</td>
+                <td className="num">
+                  <button
+                    className="btn"
+                    disabled={canceling !== null}
+                    onClick={() => cancel(o.id)}
+                  >
+                    {canceling === o.id ? <Loader2 size={14} className="spin" /> : null} Cancel
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+function pnlClass(v: number | null | undefined): string {
+  if (v == null || v === 0) return "";
+  return v > 0 ? "pnl-pos" : "pnl-neg";
+}
+
+/** Short middle-truncated id, e.g. 0x1234…cdef. */
+function truncMid(id: string | null): string {
+  if (!id) return "—";
+  return id.length <= 12 ? id : `${id.slice(0, 6)}…${id.slice(-4)}`;
 }
 
 /** Poll `check` until it resolves true (or give up after ~60s). */
