@@ -29,6 +29,7 @@ import {
 import { formatDollars } from "@caesar/money";
 import { PriceChart } from "@/components/PriceChart";
 import { OrderBook } from "@/components/OrderBook";
+import { MarketOrderTicket } from "@/components/MarketOrderTicket";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -424,6 +425,8 @@ export function MarketDetailPage() {
         </section>
 
         <OrderBook marketId={market.id} />
+
+        <MarketOrderTicket market={market} />
 
         <section className="detail-section">
           <div className="detail-section-title">Platform markets</div>

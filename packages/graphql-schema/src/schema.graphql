@@ -1386,3 +1386,141 @@ type Subscription {
   trackedTraderTrades: BaseTrade
   userNotifications: Notification
 }
+
+# --------------------------------------------------------------------------- #
+# Caesar extension — browser-signed wallet setup + trading (not in Parity SDL)
+#
+# The Privy embedded wallet signs in-browser (deploy/approval/ClobAuth/order);
+# the server only reads chain state, derives+stores per-user CLOB creds, and
+# submits signed orders with L2 HMAC. See docs/PHASE3-LIVE-TRADING.md.
+# --------------------------------------------------------------------------- #
+
+# Live on-chain readiness of the user's derived Safe (ground truth, not DB flags).
+type PolymarketAccountState {
+  signerAddress: String
+  safeAddress: String
+  isDeployed: Boolean!
+  hasV2Approvals: Boolean!
+  hasApiCredentials: Boolean!
+  # Embedded EOA gas balance (wei, stringified) — must be > 0 to self-submit setup txs.
+  signerMaticWei: String
+  pUsdBalance: Float
+  usdceBalance: Float
+  # Safe's on-chain nonce (to sign the next execTransaction, e.g. pUSD migration).
+  safeNonce: String
+  # CLOB V2 deposit wallet (signatureType 3) — the trading wallet now.
+  depositWalletAddress: String
+  depositWalletDeployed: Boolean!
+  depositHasApprovals: Boolean!
+  depositPUsdBalance: Float
+}
+
+extend type Query {
+  polymarketAccountState: PolymarketAccountState
+  # Current Batch nonce for the user's deposit wallet (browser signs the Batch with it).
+  depositWalletNonce: String
+}
+
+# Relayer-driven, gasless deposit-wallet creation (deterministic from the EOA).
+type CreateDepositWalletResult {
+  success: Boolean!
+  address: String
+  deployed: Boolean!
+  transactionHash: String
+  error: String
+}
+
+# Submit a browser-signed EIP-712 Batch of the four V2 approvals (gasless relayer).
+input SubmitDepositWalletApprovalsInput {
+  signature: String!
+  nonce: String!
+  deadline: String!
+}
+
+type SubmitDepositWalletApprovalsResult {
+  success: Boolean!
+  transactionHash: String
+  error: String
+}
+
+# Derive (or look up) the user's CLOB API creds from an in-browser ClobAuth (L1)
+# signature; the server stores them encrypted and never returns the secrets.
+input DerivePolymarketCredentialsInput {
+  # ClobAuth EIP-712 signature (hex) from the embedded wallet.
+  signature: String!
+  # Unix-seconds string + nonce string — MUST equal the signed values.
+  timestamp: String!
+  nonce: String!
+}
+
+type DerivePolymarketCredentialsResult {
+  success: Boolean!
+  error: String
+}
+
+# A fully browser-signed V2 order: the 11 signed fields (salt..builder) plus the
+# envelope extras (taker/expiration/signature) and routing hints (orderType,
+# negRisk). bigints are decimal strings; metadata/builder are bytes32 hex.
+input SignedPolymarketOrderInput {
+  salt: String!
+  maker: String!
+  signer: String!
+  taker: String!
+  tokenId: String!
+  makerAmount: String!
+  takerAmount: String!
+  side: OrderSide!
+  signatureType: Int!
+  timestamp: String!
+  metadata: String!
+  builder: String!
+  expiration: String!
+  signature: String!
+  orderType: OrderExecutionType!
+  negRisk: Boolean!
+}
+
+type SubmitPolymarketOrderResult {
+  success: Boolean!
+  status: String
+  platformOrderId: String
+  error: String
+}
+
+# A fully-authenticated CLOB request the BROWSER executes itself (fetch), so the
+# trading POST originates from the user's IP — Polymarket geoblocks the server's
+# datacenter IP and applies geo per-user. The server still validates the sig,
+# injects the api key, and computes the L2 HMAC; only the network egress is the
+# client's. headers is a name/value list (no SDL map type).
+type PreparedHttpHeader {
+  name: String!
+  value: String!
+}
+
+type PreparedClobRequest {
+  success: Boolean!
+  error: String
+  url: String
+  method: String
+  headers: [PreparedHttpHeader!]
+  body: String
+}
+
+extend type Mutation {
+  # Nullable returns: null when unauthenticated (matches placeOrder's pattern);
+  # a populated result (with success/error) otherwise.
+  derivePolymarketApiCredentials(
+    input: DerivePolymarketCredentialsInput!
+  ): DerivePolymarketCredentialsResult
+  # Server-side submit (only works from an allowed-region host).
+  submitPolymarketOrder(input: SignedPolymarketOrderInput!): SubmitPolymarketOrderResult
+  cancelPolymarketOrder(orderId: String!): SubmitPolymarketOrderResult
+  # Browser-submit: returns the signed request for the client to fetch directly.
+  preparePolymarketOrder(input: SignedPolymarketOrderInput!): PreparedClobRequest
+  preparePolymarketCancel(orderId: String!): PreparedClobRequest
+  # CLOB V2 deposit-wallet setup (gasless via the relayer).
+  createDepositWallet: CreateDepositWalletResult
+  submitDepositWalletApprovals(
+    input: SubmitDepositWalletApprovalsInput!
+  ): SubmitDepositWalletApprovalsResult
+}
