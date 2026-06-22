@@ -16,17 +16,15 @@
 import {
   buildV2LimitOrder,
   buildV2MarketOrder,
-  deriveTradingWallet,
   generateOrderSalt,
   microToPrice,
   OrderSide,
   DEFAULT_TICK_SIZE,
   type TickSize,
   type OrderV2Value,
-  type SignatureType,
 } from "@caesar/chain";
-import { isAddress, type Address } from "viem";
-import { getEmbeddedWallet, type GraphQLContext } from "../auth.js";
+import { type GraphQLContext } from "../auth.js";
+import { resolveTradingWallet } from "../wallet.js";
 
 /** Mainnet trading hard gate — OFF unless explicitly enabled in the env. */
 export const MAINNET_TRADING_ENABLED = process.env.CAESAR_ENABLE_MAINNET_TRADING === "true";
@@ -92,29 +90,6 @@ export interface CancelOrderInput {
 export interface CancelMarketOrdersInput {
   platform: "polymarket" | "kalshi";
   externalMarketId: string;
-}
-
-// --- trading-wallet resolution (funder Safe + signer EOA) -------------------
-
-interface TradingWallet {
-  signer: Address;
-  funder: Address;
-  signatureType: SignatureType;
-}
-
-/**
- * Resolve the funder (Safe) + signer (embedded EOA) for the authenticated user.
- * The signer is the Privy embedded wallet; the funder is the deterministically
- * derived Gnosis Safe (predicted address — verify before mainnet). Returns null
- * when logged out or no embedded wallet is provisioned.
- */
-async function tradingWalletFromCtx(ctx: GraphQLContext): Promise<TradingWallet | null> {
-  if (!ctx.auth) return null;
-  const wallet = await getEmbeddedWallet(ctx.auth);
-  if (!wallet || !isAddress(wallet.address)) return null;
-  const signer = wallet.address as Address;
-  const derived = deriveTradingWallet(signer, "safe");
-  return { signer, funder: derived.address, signatureType: derived.signatureType };
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -214,7 +189,7 @@ async function buildPlacement(
     throw new TradingError(`this mutation expects order.${restrictTo}, got order.${action}`);
   }
 
-  const wallet = await tradingWalletFromCtx(ctx);
+  const wallet = await resolveTradingWallet(ctx);
   if (!wallet) throw new TradingError("no trading wallet — sign in and provision an embedded wallet first");
 
   const { salt, timestamp } = freshSaltAndTs();

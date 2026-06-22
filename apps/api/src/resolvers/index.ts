@@ -31,6 +31,7 @@ import { subscriptionResolvers } from "./subscriptions.js";
 import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
 import { resolveMarketOrderbook } from "./orderbook.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
+import { resolveWalletBalance } from "./portfolio.js";
 import {
   resolvePlaceOrder,
   resolvePlaceSplitOrder,
@@ -104,6 +105,10 @@ export const resolvers = {
 
     // Phase 2: reads the authenticated Privy user from Postgres (null if logged out).
     me: (_parent: unknown, _args: unknown, ctx: GraphQLContext) => resolveMe(ctx),
+
+    // Track 1: on-chain pUSD/USDC.e balances of the user's derived Safe.
+    walletBalance: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolveWalletBalance(ctx),
   },
 
   Mutation: {
