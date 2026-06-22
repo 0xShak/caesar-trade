@@ -79,15 +79,28 @@ Everything needed already exists; this is mostly wiring:
 The mainnet dry-run that flips real trading on. Don't attempt until the user provides the
 items in "Need from you".
 
+## Trading model — DECIDED (2026-06-22): Path A (Privy embedded → derived Safe)
+- Each user trades from their **Privy embedded wallet → derived Gnosis Safe**; Caesar
+  **derives its own per-user CLOB api creds** via `deriveApiCreds` (embedded-wallet L1 sig).
+  The user's separately-generated Polymarket creds are NOT used (they're bound to the user's
+  own account `0xb847…` and correctly 401'd for any other address).
+- **Builder code** = operator config, already in `.env` (`POLYMARKET_BUILDER_CODE`,
+  `0x8bff…1492`) — reusable on any order; fees attribute to the user's builder profile.
+- **Test user** `thanhquangnguyen343@gmail.com`: embedded EOA
+  `0xfA1Bc89Fa8D6dA1985672aa03772Eb79567698D7` → trading Safe
+  `0x2697C609Cf85058c6e20daE0C469a825BB3E1bDB` (re-derive to confirm before funding).
+
 ## Need from you (blocking live trading — nothing blocks Track 1/2)
-1. **Funded mainnet dry-run** for `MAINNET-GATES.md` gates 1–2:
-   - Register a builder profile at `polymarket.com/settings?tab=builder` and paste me the
-     **`bytes32` builder code**.
-   - A **funded Polygon mainnet wallet** (a little pUSD/USDC.e + MATIC for gas) so we can
-     exercise — behind the mainnet flag — wallet setup (Safe deploy → V1/V2 approvals → CLOB
-     API-key derivation) and **one tiny real order**. I'll do the code; you fund + approve.
-   - This is the only thing standing between "terminal that shows everything" and "terminal
-     that trades real money." I cannot do it without a funded account.
+1. **Build wallet-setup EXECUTION, then a funded dry-run** (safe sequence — deploy first,
+   fund second, to avoid sending to a counterfactual address):
+   - You build + run, behind `CAESAR_ENABLE_MAINNET_TRADING`, the execution chain: deploy the
+     Safe → set pUSD (`COLLATERAL_PUSD_V2`) approvals for the CTF/exchange spenders → derive
+     CLOB api creds. Confirm the **gas model first** (Polymarket relayer vs the embedded EOA
+     needing MATIC) — that determines what the user funds.
+   - Then have the user fund the **confirmed-deployed Safe** with pUSD (+ MATIC to the embedded
+     EOA only if gas isn't relayed), and place **one ~$1 order** end-to-end. Verify fill/cancel.
+   - This is real-money signing code — write + verify it carefully in fresh context; never sign
+     outside the explicit mainnet flag.
 2. **(For reliability/prod, optional now)** a keyed **Polygon RPC** (Alchemy/Infura URL) for
    `POLYGON_RPC_HTTP` — the public `polygon-rpc.com` default works for dev reads but rate-limits.
 3. **(Deploy-time)** add the prod domain to Privy `allowed_domains` (currently empty); optionally
