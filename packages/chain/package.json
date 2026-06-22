@@ -11,11 +11,15 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lint": "eslint src"
   },
   "dependencies": {
     "@polymarket/clob-client": "^4.0.0",
     "ethers": "^5.7.2",
     "viem": "^2.21.55"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
   }
 }

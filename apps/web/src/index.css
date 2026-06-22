@@ -595,3 +595,29 @@ button {
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* --- wallet-setup checklist (Portfolio, Phase 2) --- */
+.setup-checklist {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--mut);
+}
+
+.setup-step.done {
+  color: var(--fg);
+}
+
+.setup-step.done svg {
+  color: var(--grn);
+}

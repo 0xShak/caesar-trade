@@ -5,6 +5,7 @@ import { MarketDetailPage } from "./MarketDetailPage";
 import { TradersPage } from "./TradersPage";
 import { TraderDetailPage } from "./TraderDetailPage";
 import { SpikePrivyPage } from "./SpikePrivyPage";
+import { PortfolioPage } from "./PortfolioPage";
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -32,7 +33,7 @@ export function App() {
           <Route path="/multiview" element={<Placeholder title="Multiview" />} />
           <Route path="/traders" element={<TradersPage />} />
           <Route path="/traders/:id" element={<TraderDetailPage />} />
-          <Route path="/portfolio" element={<Placeholder title="Portfolio" />} />
+          <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/signals" element={<Placeholder title="Signals" />} />
           <Route path="/monitor" element={<Placeholder title="Monitor" />} />
           <Route path="/data" element={<Placeholder title="Data" />} />

@@ -17,8 +17,11 @@ export const GET_ME = gql`
       parityAdmin
       welcomeWizardCompleted
       polymarketTradingAddress
+      polymarketWalletKind
       hasServerSigner
       isSafeDeployed
+      hasV1Approvals
+      hasV2Approvals
       hasApiCredentials
       isWalletSetupComplete
     }

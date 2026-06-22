@@ -9,6 +9,8 @@
 import { getDb, users, type UserRow } from "@caesar/db";
 import { eq } from "drizzle-orm";
 import type { User } from "@privy-io/server-auth";
+import { isAddress, type Address } from "viem";
+import { deriveTradingWallet } from "@caesar/chain";
 import { getEmbeddedWallet, type GraphQLContext } from "../auth.js";
 
 /** Current Terms-of-Service version users accept (bible §13 onboarding gate). */
@@ -75,10 +77,25 @@ async function loadOrCreateUser(ctx: GraphQLContext): Promise<UserRow | null> {
   const embeddedWalletAddress = wallet?.address ?? null;
   const email = emailOf(wallet?.user ?? null);
 
+  // The Polymarket funder (Gnosis Safe) is DETERMINISTICALLY derived from the
+  // signer EOA — a predicted address (not yet deployed; verify before mainnet).
+  const derived =
+    embeddedWalletAddress && isAddress(embeddedWalletAddress)
+      ? deriveTradingWallet(embeddedWalletAddress as Address, "safe")
+      : null;
+  const polymarketTradingAddress = derived?.address ?? null;
+  const polymarketWalletKind = derived ? "safe" : null;
+
   if (!row) {
     const inserted = await db
       .insert(users)
-      .values({ id, embeddedWalletAddress, email })
+      .values({
+        id,
+        embeddedWalletAddress,
+        email,
+        polymarketTradingAddress,
+        polymarketWalletKind,
+      })
       .onConflictDoNothing()
       .returning();
     row =
@@ -86,13 +103,16 @@ async function loadOrCreateUser(ctx: GraphQLContext): Promise<UserRow | null> {
       (await db.select().from(users).where(eq(users.id, id)).limit(1))[0];
   } else if (
     (embeddedWalletAddress && embeddedWalletAddress !== row.embeddedWalletAddress) ||
-    (email && email !== row.email)
+    (email && email !== row.email) ||
+    (polymarketTradingAddress && polymarketTradingAddress !== row.polymarketTradingAddress)
   ) {
     const updated = await db
       .update(users)
       .set({
         embeddedWalletAddress: embeddedWalletAddress ?? row.embeddedWalletAddress,
         email: email ?? row.email,
+        polymarketTradingAddress: polymarketTradingAddress ?? row.polymarketTradingAddress,
+        polymarketWalletKind: polymarketWalletKind ?? row.polymarketWalletKind,
         updatedAt: new Date(),
       })
       .where(eq(users.id, id))
