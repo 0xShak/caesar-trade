@@ -4,6 +4,19 @@ Status as of 2026-06-22. This is the live-trading build that turns the gated
 plumbing into real orders. **Architecture decided + half-built; live fire pending
 a funded signer + a supervised run.**
 
+## Current run state (2026-06-22, paused mid live-fire)
+
+Deploy was attempted live. **The CreateProxy typed-data rendered exactly right in
+Privy's signer UI** (validates `buildCreateProxyTypedData`), but signing threw
+`ReferenceError: Buffer is not defined` — Privy's browser signing needs a Buffer
+polyfill. **Fixed** (`apps/web/src/polyfills.ts`, commit 826e7dc), not yet retried.
+
+Resume: (1) **restart Vite** (pre-bundles `buffer`); (2) user logs in → Portfolio
+→ **Deploy Safe** → approve sign+send → verify bytecode; (3) **Set V2 approvals**;
+(4) build Task #3 (creds + order submit) → $1 order. Signer EOA funded 1 MATIC;
+Safe funded $27.59 pUSD, not deployed. `VITE_ENABLE_MAINNET_TRADING=true` set;
+server `CAESAR_ENABLE_MAINNET_TRADING` still OFF (only needed for order submit).
+
 ## Architecture (decided 2026-06-22)
 
 **Browser-signed, server-orchestrated, multi-tenant.** Every signature (Safe
