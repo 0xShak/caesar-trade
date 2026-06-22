@@ -25,9 +25,11 @@ served through the unchanged GraphQL SDL, with correct microdollar math througho
    detail (stats, outcomes, platform markets, trades tape, top holders).
 5. **Realtime** — `graphql-ws` server (marketTrades/multiMarketTrades/marketStats) +
    Apollo WS split link + live-ticking trades on the detail page.
-6. **Traders** — lookup by Polymarket address (value + positions) + an "active traders by
+6. **Traders** ✅ — lookup by Polymarket address (value + positions) + an "active traders by
    recent volume" list derived from the live trade feed (honest: not an all-time
-   leaderboard, since no public leaderboard endpoint exists). [status in commit log]
+   leaderboard, since no public leaderboard endpoint exists). Verified live: 266 active
+   traders ranked; a sample trader returned portfolio value, PnL, and 199 position groups
+   with correct microdollar math.
 
 ## Verification done (not just "it compiles")
 - `pnpm typecheck` green across all packages at each step; web production build green.

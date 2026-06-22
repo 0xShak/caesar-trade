@@ -1,0 +1,22 @@
+CREATE TABLE "users" (
+	"id" text PRIMARY KEY NOT NULL,
+	"embedded_wallet_address" text,
+	"email" text,
+	"tos_accepted" boolean DEFAULT false NOT NULL,
+	"tos_version" text,
+	"invite_claimed" boolean DEFAULT false NOT NULL,
+	"referral_code" text,
+	"parity_admin" boolean DEFAULT false NOT NULL,
+	"welcome_wizard_completed" boolean DEFAULT false NOT NULL,
+	"social_twitter" text,
+	"profile_picture_url" text,
+	"polymarket_trading_address" text,
+	"polymarket_wallet_kind" text,
+	"has_server_signer" boolean DEFAULT false NOT NULL,
+	"is_safe_deployed" boolean DEFAULT false NOT NULL,
+	"has_v1_approvals" boolean DEFAULT false NOT NULL,
+	"has_v2_approvals" boolean DEFAULT false NOT NULL,
+	"has_api_credentials" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);

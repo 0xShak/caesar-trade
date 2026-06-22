@@ -222,7 +222,48 @@ export const syncState = pgTable("sync_state", {
   updatedAt: updatedAt(),
 });
 
+// --------------------------------------------------------------------------- //
+// Users (Me) — Phase 2 identity. PK is the Privy DID (id from verifyAuthToken).
+// Onboarding flags (ToS, invite, welcome wizard) + the embedded-wallet address
+// extracted from Privy. Trading-wallet flags (server signer, Safe deploy,
+// approvals, api creds) default false and are advanced by the wallet-setup
+// sub-phase; `isWalletSetupComplete` is DERIVED in the resolver, not stored.
+// No money columns here, so the microdollar discipline above doesn't apply.
+// --------------------------------------------------------------------------- //
+
+export const users = pgTable("users", {
+  id: text("id").primaryKey(), // Privy DID, e.g. "did:privy:..."
+  embeddedWalletAddress: text("embedded_wallet_address"),
+  email: text("email"),
+
+  // Onboarding / identity
+  tosAccepted: boolean("tos_accepted").default(false).notNull(),
+  tosVersion: text("tos_version"),
+  inviteClaimed: boolean("invite_claimed").default(false).notNull(),
+  referralCode: text("referral_code"),
+  parityAdmin: boolean("parity_admin").default(false).notNull(),
+  welcomeWizardCompleted: boolean("welcome_wizard_completed").default(false).notNull(),
+  socialTwitter: text("social_twitter"),
+  profilePictureUrl: text("profile_picture_url"),
+
+  // Trading-wallet setup (advanced by the wallet-setup sub-phase; testnet CLOB
+  // does not exist — see docs/PHASE2-BLOCKERS.md §2 — so the live api-cred step
+  // is gated behind mainnet).
+  polymarketTradingAddress: text("polymarket_trading_address"),
+  polymarketWalletKind: text("polymarket_wallet_kind"),
+  hasServerSigner: boolean("has_server_signer").default(false).notNull(),
+  isSafeDeployed: boolean("is_safe_deployed").default(false).notNull(),
+  hasV1Approvals: boolean("has_v1_approvals").default(false).notNull(),
+  hasV2Approvals: boolean("has_v2_approvals").default(false).notNull(),
+  hasApiCredentials: boolean("has_api_credentials").default(false).notNull(),
+
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 // Convenience type exports ----------------------------------------------------
+export type UserRow = typeof users.$inferSelect;
+export type NewUserRow = typeof users.$inferInsert;
 export type EventRow = typeof events.$inferSelect;
 export type NewEventRow = typeof events.$inferInsert;
 export type MarketRow = typeof markets.$inferSelect;

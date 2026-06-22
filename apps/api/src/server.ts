@@ -6,6 +6,7 @@ import { useServer } from "graphql-ws/use/ws";
 import { PrivyClient } from "@privy-io/server-auth";
 import { loadEnv } from "@caesar/config";
 import { schema } from "./schema.js";
+import { buildContext, buildWsContext, getEmbeddedWallet } from "./auth.js";
 
 const env = loadEnv();
 const PORT = 4000;
@@ -17,6 +18,9 @@ const yoga = createYoga({
   graphqlEndpoint: "/graphql",
   graphiql: true,
   logging: false,
+  // Per-request Privy auth (Phase 2): verify Authorization + privy-id-token →
+  // { auth: { userId, idToken } | null }. Public reads still work when null.
+  context: ({ request }) => buildContext(request.headers),
 });
 
 /**
@@ -50,8 +54,8 @@ app.route({
 /**
  * Spike C — Privy token verification round-trip. The web `/spike-privy` page
  * logs in then POSTs { accessToken, identityToken } here; we verify the access
- * token server-side. Embedded-wallet extraction (getUser) is wired next session
- * once real Privy creds + an interactive login exist.
+ * token server-side and extract the embedded EVM wallet (Phase 2). The identity
+ * token lets us decode the user object locally (no rate-limited API call).
  */
 app.post("/api/spike/privy-verify", async (req, reply) => {
   if (!env.PRIVY_APP_ID || !env.PRIVY_APP_SECRET) {
@@ -61,6 +65,7 @@ app.post("/api/spike/privy-verify", async (req, reply) => {
   }
   const body = (req.body ?? {}) as { accessToken?: unknown; identityToken?: unknown };
   const accessToken = typeof body.accessToken === "string" ? body.accessToken : undefined;
+  const identityToken = typeof body.identityToken === "string" ? body.identityToken : undefined;
   if (!accessToken) {
     return reply.status(400).send({ ok: false, error: "missing accessToken" });
   }
@@ -68,10 +73,12 @@ app.post("/api/spike/privy-verify", async (req, reply) => {
   const privy = new PrivyClient(env.PRIVY_APP_ID, env.PRIVY_APP_SECRET);
   try {
     const claims = await privy.verifyAuthToken(accessToken);
+    const wallet = await getEmbeddedWallet({ userId: claims.userId, idToken: identityToken });
     return reply.send({
       ok: true,
       userId: claims.userId,
-      identityTokenReceived: typeof body.identityToken === "string",
+      identityTokenReceived: identityToken != null,
+      embeddedWalletAddress: wallet?.address ?? null,
     });
   } catch (err) {
     return reply.status(401).send({ ok: false, error: (err as Error).message });
@@ -90,7 +97,15 @@ app
     // here; ordinary POST/GET still flow through the Yoga HTTP bridge above, so
     // both transports share the one /graphql path.
     const wss = new WebSocketServer({ server: app.server, path: "/graphql" });
-    useServer({ schema }, wss);
+    useServer(
+      {
+        schema,
+        // Auth from connectionParams (FE sends authorization + privy-id-token).
+        context: (ctx) =>
+          buildWsContext(ctx.connectionParams as Record<string, unknown> | undefined),
+      },
+      wss,
+    );
     app.log.info("GraphQL subscriptions (graphql-ws) on ws://localhost:4000/graphql");
   })
   .catch((err: unknown) => {

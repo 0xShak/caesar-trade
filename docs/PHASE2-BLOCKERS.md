@@ -36,21 +36,20 @@ VITE_PRIVY_APP_ID=app_xxx        # client-exposed app id (never the secret)
 
 ---
 
-## 2. Amoy CLOB reality  ← **external fact to confirm** (Phase 0 open item #4)
-Trading-wallet setup step 5 derives a CLOB API key via `ClobClient.createOrDeriveApiKey()`.
-In Phase 0, live CLOB L1 auth on Amoy returned **401**, and `/order` returned **403
-geoblock** — suggesting `clob.polymarket.com` is **mainnet-only** and Amoy may have no CLOB
-(or needs a different host / a deployed+approved Safe first).
+## 2. Amoy CLOB reality  ← **RESOLVED 2026-06-22 (Phase 0 open item #4)**
+**Finding: there is NO Polymarket CLOB on Amoy testnet.** The CLOB is mainnet-only at
+`https://clob.polymarket.com` (Polygon chain 137). The Amoy chain id (80002) exists in the
+SDKs only to select testnet *contract addresses* (ctf_exchange, USDC) for EIP-712 domains —
+not a testnet order-matching server. No sandbox/testnet trading env exists in Polymarket docs.
 
-**Needs deciding (you / docs):** does a testnet CLOB exist? If not, Phase 2 wallet-setup
-can only be exercised against **mainnet**, which is gated by §15 (do NOT trade real funds
-until the collateral address + builderCode + Kalshi scheme gates are resolved).
+Phase 0's results explained: 401 on L1 auth = no API key on Amoy (and/or malformed L1 headers);
+403 on `/order` = Cloudflare geoblock at the mainnet edge. (Sources: docs.polymarket.com,
+github.com/Polymarket/py-clob-client constants.py.)
 
-**Options when you're back:**
-- Confirm via Polymarket docs/support whether an Amoy CLOB host exists.
-- If mainnet-only: we build + unit-test the setup *state machine* offline (Safe CREATE2
-  derivation is already in `@caesar/chain`), but defer the live CLOB-key step behind the
-  mainnet gates.
+**Decision:** Phase 2 wallet-setup (Safe CREATE2 derivation — already in `@caesar/chain` —
+EIP-712 order signing, L1/L2 header construction) is built + unit-tested **offline** with
+known-good vectors. The live CLOB-API-key derivation step (`createOrDeriveApiKey()`) stays
+**deferred behind the §15 mainnet gates**; it cannot be exercised on testnet.
 
 ---
 

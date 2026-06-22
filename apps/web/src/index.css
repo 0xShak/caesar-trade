@@ -514,3 +514,84 @@ button {
   gap: 10px;
   margin: 10px 0;
 }
+
+/* --- account menu (nav footer, Phase 2) --- */
+.nav-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.nav-account-label {
+  font-size: 12px;
+  color: var(--mut);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg3);
+  color: var(--fg);
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.nav-account .nav-account-btn {
+  width: auto;
+  margin-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.nav-account-btn:hover {
+  border-color: var(--acc);
+}
+
+/* --- modal (ToS gate, Phase 2) --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 24px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  padding: 24px;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 12px;
+}
+
+.modal-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mut);
+  margin: 0 0 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { AccountMenu } from "./AccountMenu";
 
 interface NavItem {
   to: string;
@@ -51,6 +52,7 @@ export function NavSidebar() {
         ))}
       </ul>
       <div className="nav-footer">
+        <AccountMenu />
         <ThemeSwitcher />
       </div>
     </nav>

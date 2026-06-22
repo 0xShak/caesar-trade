@@ -13,6 +13,8 @@ import "./theme/theme.css";
 import "./index.css";
 
 import { App } from "./app/App";
+import { PrivyAuthBridge } from "./components/PrivyAuthBridge";
+import { TosGate } from "./components/TosGate";
 import { apolloClient } from "./lib/apollo";
 import { queryClient } from "./lib/queryClient";
 
@@ -28,12 +30,17 @@ createRoot(rootEl).render(
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ["email", "wallet", "google", "twitter"],
+        // Match the methods enabled in the Privy dashboard (email + external
+        // wallet). Google/Twitter OAuth are disabled there — re-add here once
+        // they're turned on in the dashboard, or their buttons are dead.
+        loginMethods: ["email", "wallet"],
         embeddedWallets: {
-          createOnLogin: "all-users",
+          // Auto-provision an embedded EVM wallet on login. NOTE: this also
+          // requires the dashboard "create on login" toggle to be enabled
+          // (it currently is not — see docs/PHASE2-BLOCKERS.md / memory).
+          createOnLogin: "users-without-wallets",
           showWalletUIs: true,
-          ethereum: { createOnLogin: "all-users" },
-          solana: { createOnLogin: "all-users" },
+          ethereum: { createOnLogin: "users-without-wallets" },
         },
         appearance: {
           theme: "dark",
@@ -44,7 +51,9 @@ createRoot(rootEl).render(
       <ApolloProvider client={apolloClient}>
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
+            <PrivyAuthBridge />
             <App />
+            <TosGate />
             <Toaster theme="dark" position="bottom-right" />
           </BrowserRouter>
         </QueryClientProvider>
