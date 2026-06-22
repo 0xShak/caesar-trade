@@ -1,24 +1,42 @@
 import { useState } from "react";
-import { useQuery } from "@apollo/client";
+import { useApolloClient, useMutation, useQuery } from "@apollo/client";
 import { usePrivy } from "@privy-io/react-auth";
 import { Check, Circle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatEther, type Address, type Hex, type TypedDataDefinition } from "viem";
 import {
-  INFRA,
   POLYGON_CHAIN_ID,
-  buildCreateProxyTypedData,
-  encodeCreateProxyCall,
-  buildApprovalMultiSendTx,
+  OrderSide,
+  SignatureType,
+  COLLATERAL_PUSD_V2,
+  buildClobAuthTypedData,
+  buildV2LimitOrder,
+  buildType3OrderTypedData,
+  assembleType3OrderSignature,
+  buildErc20TransferCall,
+  buildDepositWalletApprovalCalls,
+  buildDepositWalletBatchTypedData,
   assembleSafeTx,
   buildSafeTxTypedData,
   encodeExecTransaction,
+  exchangeContractFor,
+  generateOrderSalt,
 } from "@caesar/chain";
-import { POLYMARKET_ACCOUNT_STATE } from "@/gql/wallet";
+import {
+  POLYMARKET_ACCOUNT_STATE,
+  DEPOSIT_WALLET_NONCE,
+  CREATE_DEPOSIT_WALLET,
+  SUBMIT_DEPOSIT_WALLET_APPROVALS,
+  DERIVE_POLYMARKET_CREDENTIALS,
+  PREPARE_POLYMARKET_ORDER,
+  PREPARE_POLYMARKET_CANCEL,
+} from "@/gql/wallet";
 import { useTradingWallet } from "@/lib/tradingWallet";
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+
 /** Client-side mainnet gate — mirrors the server CAESAR_ENABLE_MAINNET_TRADING.
- *  Live deploy/approval buttons only render when this is explicitly "true". */
+ *  Live setup/trading buttons only render when this is explicitly "true". */
 const MAINNET = import.meta.env.VITE_ENABLE_MAINNET_TRADING === "true";
 
 interface AccountState {
@@ -30,65 +48,90 @@ interface AccountState {
   signerMaticWei: string | null;
   pUsdBalance: number | null;
   usdceBalance: number | null;
+  safeNonce: string | null;
+  depositWalletAddress: string | null;
+  depositWalletDeployed: boolean;
+  depositHasApprovals: boolean;
+  depositPUsdBalance: number | null;
 }
 
+type Busy = null | "deposit" | "migrate" | "approve" | "creds";
+
 /**
- * Portfolio / wallet-setup page. Reads live on-chain readiness
- * (`polymarketAccountState`) and, when the mainnet gate is on, drives the
- * browser-signed setup steps: deploy the Safe (CreateProxy sig → factory) and set
- * V2 approvals (SafeTx sig → execTransaction). All signing happens in the user's
- * Privy embedded wallet; the server never holds a key. See docs/PHASE3-LIVE-TRADING.md.
+ * Portfolio / wallet-setup page for the CLOB V2 **deposit-wallet** (signatureType
+ * 3) flow. Reads live on-chain readiness (`polymarketAccountState`) and, when the
+ * mainnet gate is on, drives the browser-signed setup:
+ *   1. create the deposit wallet (gasless, relayer-driven)
+ *   2. migrate pUSD from the legacy Safe → deposit wallet (Safe execTransaction)
+ *   3. set deposit-wallet approvals (gasless EIP-712 Batch via relayer)
+ *   4. derive CLOB API creds (EOA L1 ClobAuth)
+ * All signing happens in the Privy embedded wallet; the server holds no key.
  */
 export function PortfolioPage() {
   const { ready, authenticated } = usePrivy();
   const wallet = useTradingWallet();
+  const apollo = useApolloClient();
   const { data, loading, refetch } = useQuery<{ polymarketAccountState: AccountState | null }>(
     POLYMARKET_ACCOUNT_STATE,
     { skip: !authenticated, pollInterval: 8000 },
   );
-  const [busy, setBusy] = useState<null | "deploy" | "approve">(null);
+  const [busy, setBusy] = useState<Busy>(null);
+  const [createDeposit] = useMutation(CREATE_DEPOSIT_WALLET);
+  const [submitApprovals] = useMutation(SUBMIT_DEPOSIT_WALLET_APPROVALS);
+  const [deriveCreds] = useMutation(DERIVE_POLYMARKET_CREDENTIALS);
 
   const acct = data?.polymarketAccountState ?? null;
   const gasWei = acct?.signerMaticWei ? BigInt(acct.signerMaticWei) : 0n;
   const hasGas = gasWei > 0n;
+  const safePUsd = acct?.pUsdBalance ?? 0;
+  const depositPUsd = acct?.depositPUsdBalance ?? 0;
+  const deposit = acct?.depositWalletAddress as Address | undefined;
+  const needsMigration = (acct?.depositWalletDeployed ?? false) && safePUsd > 0;
 
   const steps: Array<{ key: string; label: string; done: boolean }> = [
-    { key: "gas", label: "Fund signer with gas (MATIC)", done: hasGas },
-    { key: "deploy", label: "Deploy trading Safe", done: !!acct?.isDeployed },
-    { key: "approve", label: "Set V2 exchange approvals", done: !!acct?.hasV2Approvals },
+    { key: "deposit", label: "Create deposit wallet (gasless)", done: !!acct?.depositWalletDeployed },
+    { key: "migrate", label: "Move pUSD collateral into deposit wallet", done: depositPUsd > 0 },
+    { key: "approve", label: "Set deposit-wallet V2 approvals (gasless)", done: !!acct?.depositHasApprovals },
     { key: "creds", label: "Derive CLOB API credentials", done: !!acct?.hasApiCredentials },
   ];
-  const complete = steps.every((s) => s.done);
+  const tradeReady =
+    !!acct?.depositWalletDeployed && !!acct?.depositHasApprovals && !!acct?.hasApiCredentials;
+  const complete = tradeReady && depositPUsd > 0;
 
-  async function runDeploy() {
-    if (!acct?.signerAddress) return;
-    setBusy("deploy");
+  async function runCreateDeposit() {
+    setBusy("deposit");
     try {
-      const td = buildCreateProxyTypedData(POLYGON_CHAIN_ID) as unknown as TypedDataDefinition;
-      const sig = await wallet.signTypedData(td);
-      const hash = await wallet.sendTx({
-        to: INFRA.safeFactory as Address,
-        data: encodeCreateProxyCall(sig as Hex),
-      });
-      toast.success(`Deploy submitted — ${hash.slice(0, 10)}…`);
-      // Poll the account state until the Safe shows deployed.
-      await waitFor(() => refetch().then((r) => !!r.data?.polymarketAccountState?.isDeployed));
-      toast.success("Safe deployed.");
+      const res = await createDeposit();
+      const out = res.data?.createDepositWallet;
+      if (!out?.success) throw new Error(out?.error ?? "deposit-wallet creation failed");
+      await waitFor(() => refetch().then((r) => !!r.data?.polymarketAccountState?.depositWalletDeployed));
+      toast.success("Deposit wallet ready.");
     } catch (err) {
-      toast.error(`Deploy failed: ${errMsg(err)}`);
+      toast.error(`Create failed: ${errMsg(err)}`);
     } finally {
       setBusy(null);
     }
   }
 
-  async function runApprove() {
-    if (!acct?.safeAddress) return;
-    setBusy("approve");
+  async function runMigrate() {
+    if (!acct?.safeAddress || !deposit) return;
+    const amount = BigInt(Math.floor(safePUsd * 1e6));
+    if (amount <= 0n) {
+      toast.error("No pUSD in the Safe to migrate.");
+      return;
+    }
+    setBusy("migrate");
     try {
-      // Fresh Safe → approvals are its first tx (nonce 0). Production should read
-      // the live Safe nonce(); 0 is correct for the initial setup.
-      const inner = buildApprovalMultiSendTx(POLYGON_CHAIN_ID, "v2");
-      const tx = assembleSafeTx({ ...inner, nonce: 0n });
+      // Safe execTransaction: pUSD.transfer(depositWallet, fullBalance). The EOA
+      // pays gas; the Safe is owned by the EOA, nonce read from chain.
+      const transferData = buildErc20TransferCall(COLLATERAL_PUSD_V2, deposit, amount).data;
+      const tx = assembleSafeTx({
+        to: COLLATERAL_PUSD_V2,
+        value: 0n,
+        data: transferData,
+        operation: 0,
+        nonce: BigInt(acct.safeNonce ?? "0"),
+      });
       const td = buildSafeTxTypedData(
         POLYGON_CHAIN_ID,
         acct.safeAddress as Address,
@@ -99,11 +142,71 @@ export function PortfolioPage() {
         to: acct.safeAddress as Address,
         data: encodeExecTransaction(tx, sig as Hex),
       });
-      toast.success(`Approvals submitted — ${hash.slice(0, 10)}…`);
-      await waitFor(() => refetch().then((r) => !!r.data?.polymarketAccountState?.hasV2Approvals));
-      toast.success("V2 approvals set.");
+      toast.success(`Migration submitted — ${hash.slice(0, 10)}…`);
+      await waitFor(() => refetch().then((r) => (r.data?.polymarketAccountState?.depositPUsdBalance ?? 0) > 0));
+      toast.success("pUSD moved to deposit wallet.");
+    } catch (err) {
+      toast.error(`Migration failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runApprove() {
+    if (!deposit) return;
+    setBusy("approve");
+    try {
+      // Fetch the current Batch nonce, sign the four V2 approvals as an EIP-712
+      // Batch; the server submits it gaslessly via the relayer.
+      const nres = await apollo.query<{ depositWalletNonce: string | null }>({
+        query: DEPOSIT_WALLET_NONCE,
+        fetchPolicy: "network-only",
+      });
+      const nonce = nres.data?.depositWalletNonce ?? "0";
+      const deadline = (Math.floor(Date.now() / 1000) + 3600).toString();
+      const calls = buildDepositWalletApprovalCalls(POLYGON_CHAIN_ID);
+      const td = buildDepositWalletBatchTypedData({
+        walletAddress: deposit,
+        chainId: POLYGON_CHAIN_ID,
+        nonce: BigInt(nonce),
+        deadline: BigInt(deadline),
+        calls,
+      }) as unknown as TypedDataDefinition;
+      const signature = await wallet.signTypedData(td);
+      const res = await submitApprovals({ variables: { input: { signature, nonce, deadline } } });
+      const out = res.data?.submitDepositWalletApprovals;
+      if (!out?.success) throw new Error(out?.error ?? "approval submission failed");
+      await waitFor(() => refetch().then((r) => !!r.data?.polymarketAccountState?.depositHasApprovals));
+      toast.success("Deposit-wallet approvals set.");
     } catch (err) {
       toast.error(`Approvals failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runDeriveCreds() {
+    if (!acct?.signerAddress) return;
+    setBusy("creds");
+    try {
+      // ClobAuth (L1): the EOA attests control. The api key binds to the EOA; the
+      // deposit wallet is associated server-side via relayer registration.
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const nonce = "0";
+      const td = buildClobAuthTypedData(
+        acct.signerAddress as Address,
+        POLYGON_CHAIN_ID,
+        timestamp,
+        BigInt(nonce),
+      ) as unknown as TypedDataDefinition;
+      const signature = await wallet.signTypedData(td);
+      const res = await deriveCreds({ variables: { input: { signature, timestamp, nonce } } });
+      const out = res.data?.derivePolymarketApiCredentials;
+      if (!out?.success) throw new Error(out?.error ?? "credential derivation failed");
+      await waitFor(() => refetch().then((r) => !!r.data?.polymarketAccountState?.hasApiCredentials));
+      toast.success("CLOB credentials derived.");
+    } catch (err) {
+      toast.error(`Credentials failed: ${errMsg(err)}`);
     } finally {
       setBusy(null);
     }
@@ -125,8 +228,10 @@ export function PortfolioPage() {
         ) : (
           <>
             <div className="spike-row">
-              <span className="pill">trading wallet</span>
-              <span title={acct?.safeAddress ?? undefined}>{acct?.safeAddress ?? "—"}</span>
+              <span className="pill">deposit wallet</span>
+              <span title={acct?.depositWalletAddress ?? undefined}>
+                {acct?.depositWalletAddress ?? "—"}
+              </span>
             </div>
             <div className="spike-row">
               <span className="pill">signer (EOA)</span>
@@ -135,9 +240,9 @@ export function PortfolioPage() {
               </span>
             </div>
             <div className="spike-row">
-              <span className="pill">balances</span>
+              <span className="pill">collateral</span>
               <span>
-                {fmtUsd(acct?.pUsdBalance)} pUSD · {fmtUsd(acct?.usdceBalance)} USDC.e
+                {fmtUsd(depositPUsd)} in deposit · {fmtUsd(safePUsd)} in legacy Safe
               </span>
             </div>
 
@@ -152,40 +257,51 @@ export function PortfolioPage() {
 
             {MAINNET ? (
               <div className="setup-actions">
-                {!hasGas && acct?.signerAddress && (
-                  <p className="page-meta">
-                    Send ~1 MATIC to your signer ({acct.signerAddress}) to pay setup gas, then
-                    this updates automatically.
-                  </p>
-                )}
-                {hasGas && !acct?.isDeployed && (
-                  <button className="btn" disabled={busy !== null} onClick={runDeploy}>
-                    {busy === "deploy" ? <Loader2 size={14} className="spin" /> : null} Deploy Safe
+                {!acct?.depositWalletDeployed && (
+                  <button className="btn" disabled={busy !== null} onClick={runCreateDeposit}>
+                    {busy === "deposit" ? <Loader2 size={14} className="spin" /> : null} Create deposit
+                    wallet
                   </button>
                 )}
-                {acct?.isDeployed && !acct?.hasV2Approvals && (
+                {needsMigration && !hasGas && (
+                  <p className="page-meta">
+                    Send ~0.1 MATIC to your signer ({acct?.signerAddress}) to pay gas for the one-time
+                    pUSD migration, then this updates automatically.
+                  </p>
+                )}
+                {needsMigration && hasGas && (
+                  <button className="btn" disabled={busy !== null} onClick={runMigrate}>
+                    {busy === "migrate" ? <Loader2 size={14} className="spin" /> : null} Move{" "}
+                    {fmtUsd(safePUsd)} pUSD → deposit wallet
+                  </button>
+                )}
+                {acct?.depositWalletDeployed && !acct?.depositHasApprovals && (
                   <button className="btn" disabled={busy !== null} onClick={runApprove}>
-                    {busy === "approve" ? <Loader2 size={14} className="spin" /> : null} Set V2
-                    approvals
+                    {busy === "approve" ? <Loader2 size={14} className="spin" /> : null} Set V2 approvals
                   </button>
                 )}
-                {acct?.isDeployed && acct?.hasV2Approvals && !acct?.hasApiCredentials && (
-                  <p className="page-meta">
-                    Next: derive CLOB credentials (coming in the trading step).
-                  </p>
+                {acct?.depositWalletDeployed && acct?.depositHasApprovals && !acct?.hasApiCredentials && (
+                  <button className="btn" disabled={busy !== null} onClick={runDeriveCreds}>
+                    {busy === "creds" ? <Loader2 size={14} className="spin" /> : null} Derive CLOB
+                    credentials
+                  </button>
                 )}
               </div>
             ) : (
               <p className="page-meta" style={{ marginTop: 8 }}>
                 On-chain setup actions are disabled (set <code>VITE_ENABLE_MAINNET_TRADING=true</code>{" "}
-                to enable live deploy/approvals). Status above is read live from Polygon.
+                to enable). Status above is read live from Polygon.
               </p>
             )}
 
             <div className="spike-row" style={{ marginTop: 8 }}>
               <span className="pill">status</span>
-              <span>{complete ? "ready to trade" : "incomplete"}</span>
+              <span>{complete ? "ready to trade" : tradeReady ? "ready (fund deposit wallet to trade)" : "incomplete"}</span>
             </div>
+
+            {tradeReady && MAINNET && deposit && acct?.signerAddress && (
+              <OrderTicket depositWallet={deposit} sign={wallet.signTypedData} />
+            )}
           </>
         )}
       </div>
@@ -195,6 +311,213 @@ export function PortfolioPage() {
 
 function fmtUsd(v: number | null | undefined): string {
   return v == null ? "—" : `$${v.toFixed(2)}`;
+}
+
+interface PreparedClobRequest {
+  success: boolean;
+  error?: string | null;
+  url?: string | null;
+  method?: string | null;
+  headers?: Array<{ name: string; value: string }> | null;
+  body?: string | null;
+}
+
+/**
+ * Execute a server-prepared CLOB request directly from the browser (so the POST
+ * comes from the user's IP, dodging the server's geoblock). Parses the CLOB
+ * response into {id, status} or throws with the API error text.
+ */
+async function sendPreparedToClob(
+  p: PreparedClobRequest | null | undefined,
+): Promise<{ id: string | null; status: string | null }> {
+  if (!p?.success) throw new Error(p?.error ?? "request preparation failed");
+  if (!p.url || !p.method) throw new Error("incomplete prepared request");
+  const headers = Object.fromEntries((p.headers ?? []).map((h) => [h.name, h.value] as const));
+  const resp = await fetch(p.url, { method: p.method, headers, body: p.body ?? undefined });
+  const text = await resp.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* keep raw text */
+  }
+  const b = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+  const errText =
+    (b.error as string | undefined) ??
+    (b.errorMsg as string | undefined) ??
+    (typeof parsed === "string" && parsed ? parsed : undefined);
+  if (!resp.ok || errText) throw new Error(errText ?? `CLOB HTTP ${resp.status}`);
+  const id = (b.orderID ?? b.orderId ?? b.id ?? null) as string | null;
+  const status = (b.status ?? (b.success === true ? "accepted" : null)) as string | null;
+  return { id, status };
+}
+
+interface OrderTicketProps {
+  depositWallet: Address;
+  sign: (td: TypedDataDefinition) => Promise<Hex>;
+}
+
+/**
+ * Browser-signed type-3 order ticket. Builds a V2 LIMIT order with maker == signer
+ * == the deposit wallet (signatureType 3 / POLY_1271), signs the ERC-7739 nested
+ * EIP-712 with the embedded EOA, assembles the on-chain ERC-1271 signature, and
+ * submits via the gated browser-submit path. Defaults to a tiny resting BUY far
+ * from any mid so the first live order rests (and can be canceled) rather than
+ * filling. Paste a market's YES/NO clobTokenId to target it.
+ */
+function OrderTicket({ depositWallet, sign }: OrderTicketProps) {
+  const [tokenId, setTokenId] = useState("");
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
+  const [price, setPrice] = useState("0.02");
+  const [size, setSize] = useState("5");
+  const [orderType, setOrderType] = useState<"GTC" | "FOK">("GTC");
+  const [negRisk, setNegRisk] = useState(false);
+  const [busy, setBusy] = useState<null | "submit" | "cancel">(null);
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+
+  const [prepareOrder] = useMutation(PREPARE_POLYMARKET_ORDER);
+  const [prepareCancel] = useMutation(PREPARE_POLYMARKET_CANCEL);
+
+  const notional = (Number(price) || 0) * (Number(size) || 0);
+
+  async function onSubmit() {
+    if (!tokenId.trim()) {
+      toast.error("Enter the outcome's clobTokenId.");
+      return;
+    }
+    setBusy("submit");
+    try {
+      const salt = generateOrderSalt(Math.random(), Date.now());
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
+      // Type-3: maker == signer == deposit wallet.
+      const order = buildV2LimitOrder({
+        funder: depositWallet,
+        signer: depositWallet,
+        tokenId: BigInt(tokenId.trim()),
+        side: side === "BUY" ? OrderSide.BUY : OrderSide.SELL,
+        signatureType: SignatureType.POLY_1271,
+        salt,
+        timestamp,
+        price: Number(price),
+        size: Number(size),
+        tickSize: "0.01",
+      });
+      const exchange = exchangeContractFor(POLYGON_CHAIN_ID, negRisk);
+      // Sign the ERC-7739 TypedDataSign with the embedded EOA (the wallet owner)…
+      const td = buildType3OrderTypedData(
+        order,
+        POLYGON_CHAIN_ID,
+        exchange,
+        depositWallet,
+      ) as unknown as TypedDataDefinition;
+      const innerSig = await sign(td);
+      // …then assemble the on-chain ERC-1271 signature the exchange validates.
+      const signature = assembleType3OrderSignature({
+        order,
+        innerSignature: innerSig,
+        chainId: POLYGON_CHAIN_ID,
+        exchange,
+      });
+      const res = await prepareOrder({
+        variables: {
+          input: {
+            salt: order.salt.toString(),
+            maker: order.maker,
+            signer: order.signer,
+            taker: ZERO_ADDRESS,
+            tokenId: order.tokenId.toString(),
+            makerAmount: order.makerAmount.toString(),
+            takerAmount: order.takerAmount.toString(),
+            side,
+            signatureType: order.signatureType,
+            timestamp: order.timestamp.toString(),
+            metadata: order.metadata,
+            builder: order.builder,
+            expiration: "0",
+            signature,
+            orderType,
+            negRisk,
+          },
+        },
+      });
+      const { id, status } = await sendPreparedToClob(res.data?.preparePolymarketOrder);
+      setLastOrderId(id);
+      toast.success(`Order ${status ?? "accepted"}${id ? ` — ${id.slice(0, 10)}…` : ""}`);
+    } catch (err) {
+      toast.error(`Order failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onCancel() {
+    if (!lastOrderId) return;
+    setBusy("cancel");
+    try {
+      const res = await prepareCancel({ variables: { orderId: lastOrderId } });
+      await sendPreparedToClob(res.data?.preparePolymarketCancel);
+      toast.success("Order canceled.");
+      setLastOrderId(null);
+    } catch (err) {
+      toast.error(`Cancel failed: ${errMsg(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="order-ticket" style={{ marginTop: 16, borderTop: "1px solid var(--border, #333)", paddingTop: 12 }}>
+      <div className="spike-row">
+        <span className="pill">order ticket</span>
+        <span className="page-meta">browser-signed · type-3 · ~${notional.toFixed(2)} notional</span>
+      </div>
+      <div style={{ display: "grid", gap: 8, maxWidth: 520, marginTop: 8 }}>
+        <label style={{ display: "grid", gap: 2 }}>
+          <span className="page-meta">clobTokenId (outcome)</span>
+          <input value={tokenId} onChange={(e) => setTokenId(e.target.value)} placeholder="e.g. 7138…" />
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ display: "grid", gap: 2 }}>
+            <span className="page-meta">side</span>
+            <select value={side} onChange={(e) => setSide(e.target.value as "BUY" | "SELL")}>
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: 2 }}>
+            <span className="page-meta">price (0–1)</span>
+            <input value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 90 }} />
+          </label>
+          <label style={{ display: "grid", gap: 2 }}>
+            <span className="page-meta">size (shares)</span>
+            <input value={size} onChange={(e) => setSize(e.target.value)} style={{ width: 90 }} />
+          </label>
+          <label style={{ display: "grid", gap: 2 }}>
+            <span className="page-meta">type</span>
+            <select value={orderType} onChange={(e) => setOrderType(e.target.value as "GTC" | "FOK")}>
+              <option value="GTC">GTC (rest)</option>
+              <option value="FOK">FOK (fill)</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", alignItems: "end", gap: 4 }}>
+            <input type="checkbox" checked={negRisk} onChange={(e) => setNegRisk(e.target.checked)} />
+            <span className="page-meta">neg-risk market</span>
+          </label>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" disabled={busy !== null} onClick={onSubmit}>
+            {busy === "submit" ? <Loader2 size={14} className="spin" /> : null} Sign &amp; submit order
+          </button>
+          {lastOrderId && (
+            <button className="btn" disabled={busy !== null} onClick={onCancel}>
+              {busy === "cancel" ? <Loader2 size={14} className="spin" /> : null} Cancel last order
+            </button>
+          )}
+        </div>
+        {lastOrderId && <span className="page-meta">resting order: {lastOrderId}</span>}
+      </div>
+    </div>
+  );
 }
 
 function errMsg(err: unknown): string {

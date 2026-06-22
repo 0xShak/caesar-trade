@@ -7,7 +7,7 @@
  * units / 1e6), matching the SDL `Wallet` wire-contract. Returns null when logged
  * out / no embedded wallet yet.
  */
-import { baseUnitsToUsd, hasV2ApprovalsSet, polygonClient, readWalletState } from "../chain-reads.js";
+import { baseUnitsToUsd, hasV2ApprovalsSet, polygonClient, readSafeNonce, readWalletState } from "../chain-reads.js";
 import { resolveTradingWallet } from "../wallet.js";
 import type { GraphQLContext } from "../auth.js";
 import { getDb, users } from "@caesar/db";
@@ -33,8 +33,10 @@ export async function resolvePolymarketAccountState(ctx: GraphQLContext) {
   const wallet = await resolveTradingWallet(ctx);
   if (!wallet) return null;
 
-  const [state, signerMaticWei, hasApiCredentials] = await Promise.all([
+  const [state, depositState, safeNonce, signerMaticWei, hasApiCredentials] = await Promise.all([
     readWalletState(wallet.funder),
+    readWalletState(wallet.depositWallet),
+    readSafeNonce(wallet.funder),
     polygonClient().getBalance({ address: wallet.signer }),
     hasApiCredentialsForUser(ctx),
   ]);
@@ -48,6 +50,12 @@ export async function resolvePolymarketAccountState(ctx: GraphQLContext) {
     signerMaticWei: signerMaticWei.toString(),
     pUsdBalance: baseUnitsToUsd(state.pusd),
     usdceBalance: baseUnitsToUsd(state.usdce),
+    safeNonce: safeNonce.toString(),
+    // CLOB V2 deposit wallet (the trading wallet now).
+    depositWalletAddress: wallet.depositWallet,
+    depositWalletDeployed: depositState.isDeployed,
+    depositHasApprovals: hasV2ApprovalsSet(depositState),
+    depositPUsdBalance: baseUnitsToUsd(depositState.pusd),
   };
 }
 

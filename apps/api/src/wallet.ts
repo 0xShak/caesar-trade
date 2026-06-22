@@ -5,16 +5,21 @@
  * they agree on one source of truth. Pure derivation + a Privy lookup; no chain
  * writes. Returns null when logged out or no embedded wallet is provisioned.
  */
-import { deriveTradingWallet, type SignatureType } from "@caesar/chain";
+import { deriveDepositWalletAddress, deriveTradingWallet, type SignatureType } from "@caesar/chain";
 import { isAddress, type Address } from "viem";
 import { getEmbeddedWallet, type GraphQLContext } from "./auth.js";
 
 export interface UserTradingWallet {
-  /** the Privy embedded EOA that signs orders + setup payloads. */
+  /** the Privy embedded EOA that signs orders + setup payloads (and owns both wallets). */
   signer: Address;
-  /** the derived Gnosis Safe that holds collateral (order `maker`/funder). */
+  /** legacy Gnosis Safe (grandfathered-only on CLOB V2); still the pUSD source to migrate. */
   funder: Address;
   signatureType: SignatureType;
+  /**
+   * CLOB V2 deposit wallet (sigType 3) — the maker AND signer for type-3 orders.
+   * Relayer-created, deterministic from the EOA. This is the trading wallet now.
+   */
+  depositWallet: Address;
 }
 
 export async function resolveTradingWallet(
@@ -25,5 +30,10 @@ export async function resolveTradingWallet(
   if (!wallet || !isAddress(wallet.address)) return null;
   const signer = wallet.address as Address;
   const derived = deriveTradingWallet(signer, "safe");
-  return { signer, funder: derived.address, signatureType: derived.signatureType };
+  return {
+    signer,
+    funder: derived.address,
+    signatureType: derived.signatureType,
+    depositWallet: deriveDepositWalletAddress(signer),
+  };
 }

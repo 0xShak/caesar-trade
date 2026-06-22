@@ -261,7 +261,28 @@ export const users = pgTable("users", {
   updatedAt: updatedAt(),
 });
 
+/**
+ * Per-user Polymarket CLOB API credentials (L2 trading auth).
+ *
+ * The {key, secret, passphrase} triple is derived from the user's in-browser
+ * ClobAuth (L1) signature and is SENSITIVE: it authorizes order placement under
+ * the user's account. It is NEVER stored in plaintext — `encrypted` holds an
+ * AES-256-GCM blob (see apps/api/src/secrets.ts) of the JSON triple, decrypted
+ * server-side only at order-submit time. One row per user (their Privy DID).
+ */
+export const polymarketCredentials = pgTable("polymarket_credentials", {
+  userId: text("user_id").primaryKey(), // Privy DID — FK to users.id
+  // AES-256-GCM(JSON {key, secret, passphrase}); format iv:tag:ciphertext (base64).
+  encrypted: text("encrypted").notNull(),
+  // The signer EOA the creds were derived for (sanity-check on submit).
+  signerAddress: text("signer_address").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 // Convenience type exports ----------------------------------------------------
+export type PolymarketCredentialsRow = typeof polymarketCredentials.$inferSelect;
+export type NewPolymarketCredentialsRow = typeof polymarketCredentials.$inferInsert;
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type EventRow = typeof events.$inferSelect;

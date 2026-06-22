@@ -15,6 +15,13 @@
       "when": 1782130923932,
       "tag": "0001_lean_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782153630485,
+      "tag": "0002_shiny_thunderbird",
+      "breakpoints": true
     }
   ]
 }

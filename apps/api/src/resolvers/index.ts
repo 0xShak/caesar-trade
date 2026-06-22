@@ -39,11 +39,26 @@ import {
   resolvePlaceOrderBatch,
   resolveCancelOrder,
   resolveCancelMarketOrders,
+  resolveSubmitPolymarketOrder,
+  resolveCancelPolymarketOrder,
+  resolvePreparePolymarketOrder,
+  resolvePreparePolymarketCancel,
   type PlaceOrderInput,
   type PlaceOrderBatchInput,
   type CancelOrderInput,
   type CancelMarketOrdersInput,
+  type SignedPolymarketOrderInput,
 } from "./orders.js";
+import {
+  resolveDerivePolymarketApiCredentials,
+  type DeriveCredentialsInput,
+} from "./credentials.js";
+import {
+  resolveCreateDepositWallet,
+  resolveSubmitDepositWalletApprovals,
+  resolveDepositWalletNonce,
+  type SubmitDepositWalletApprovalsInput,
+} from "./deposit-wallet.js";
 import type { GraphQLContext } from "../auth.js";
 
 /**
@@ -113,6 +128,10 @@ export const resolvers = {
     // Caesar: live trading-readiness (deployed / approvals / creds / gas).
     polymarketAccountState: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
       resolvePolymarketAccountState(ctx),
+
+    // CLOB V2 deposit-wallet Batch nonce (browser signs approvals with it).
+    depositWalletNonce: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolveDepositWalletNonce(ctx),
   },
 
   Mutation: {
@@ -145,5 +164,41 @@ export const resolvers = {
       args: { input: CancelMarketOrdersInput },
       ctx: GraphQLContext,
     ) => resolveCancelMarketOrders(ctx, args.input),
+
+    // Browser-signed trading (Phase 3 live path) — all gated server-side.
+    derivePolymarketApiCredentials: (
+      _p: unknown,
+      args: { input: DeriveCredentialsInput },
+      ctx: GraphQLContext,
+    ) => resolveDerivePolymarketApiCredentials(ctx, args.input),
+
+    submitPolymarketOrder: (
+      _p: unknown,
+      args: { input: SignedPolymarketOrderInput },
+      ctx: GraphQLContext,
+    ) => resolveSubmitPolymarketOrder(ctx, args.input),
+
+    cancelPolymarketOrder: (_p: unknown, args: { orderId: string }, ctx: GraphQLContext) =>
+      resolveCancelPolymarketOrder(ctx, args.orderId),
+
+    // Browser-submit path (order POST originates from the user's IP).
+    preparePolymarketOrder: (
+      _p: unknown,
+      args: { input: SignedPolymarketOrderInput },
+      ctx: GraphQLContext,
+    ) => resolvePreparePolymarketOrder(ctx, args.input),
+
+    preparePolymarketCancel: (_p: unknown, args: { orderId: string }, ctx: GraphQLContext) =>
+      resolvePreparePolymarketCancel(ctx, args.orderId),
+
+    // CLOB V2 deposit-wallet setup (gasless via relayer).
+    createDepositWallet: (_p: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolveCreateDepositWallet(ctx),
+
+    submitDepositWalletApprovals: (
+      _p: unknown,
+      args: { input: SubmitDepositWalletApprovalsInput },
+      ctx: GraphQLContext,
+    ) => resolveSubmitDepositWalletApprovals(ctx, args.input),
   },
 };

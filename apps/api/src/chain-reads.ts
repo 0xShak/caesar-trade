@@ -102,6 +102,26 @@ export async function readWalletState(safe: Address): Promise<WalletState> {
   };
 }
 
+const SAFE_NONCE_ABI = [
+  { type: "function", name: "nonce", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const satisfies Abi;
+
+/**
+ * The Safe's current on-chain `nonce()` (needed to sign the next execTransaction,
+ * e.g. migrating pUSD out to the deposit wallet). Returns 0 if undeployed/unreadable.
+ */
+export async function readSafeNonce(safe: Address): Promise<bigint> {
+  try {
+    return await polygonClient().readContract({
+      address: safe,
+      abi: SAFE_NONCE_ABI,
+      functionName: "nonce",
+    });
+  } catch {
+    return 0n;
+  }
+}
+
 /** True when all four V2 approvals (collateral + CTF, both exchanges) are set. */
 export function hasV2ApprovalsSet(s: WalletState): boolean {
   return (
