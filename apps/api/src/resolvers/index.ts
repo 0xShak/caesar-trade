@@ -17,6 +17,16 @@ import {
   type MarketRecentTradesArgs,
   type MarketPositionsArgs,
 } from "./trades.js";
+import {
+  resolveTraders,
+  resolveTrader,
+  resolveResolveTrader,
+  resolveTraderPositions,
+  type TradersArgs,
+  type TraderArgs,
+  type ResolveTraderArgs,
+  type TraderPositionsArgs,
+} from "./traders.js";
 import { subscriptionResolvers } from "./subscriptions.js";
 
 /**
@@ -58,6 +68,16 @@ export const resolvers = {
 
     marketPositions: (_parent: unknown, args: MarketPositionsArgs) =>
       resolveMarketPositions(args),
+
+    traders: (_parent: unknown, args: TradersArgs) => resolveTraders(args),
+
+    trader: (_parent: unknown, args: TraderArgs) => resolveTrader(args),
+
+    resolveTrader: (_parent: unknown, args: ResolveTraderArgs) =>
+      resolveResolveTrader(args),
+
+    traderPositions: (_parent: unknown, args: TraderPositionsArgs) =>
+      resolveTraderPositions(args),
 
     // Stub user so the FE onboarding gates have something to read.
     me: () => ({

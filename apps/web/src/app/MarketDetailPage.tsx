@@ -256,9 +256,23 @@ function TopHoldersSection({ marketId }: { marketId: string }) {
                   <tbody>
                     {positions.map((p, i) => (
                       <tr key={p.proxyWallet ?? `${g.outcomeId}:${i}`}>
-                        <td>{p.trader?.displayName ?? "—"}</td>
+                        <td>
+                          {p.proxyWallet ? (
+                            <Link to={`/traders/${p.proxyWallet}`}>
+                              {p.trader?.displayName ?? truncId(p.proxyWallet)}
+                            </Link>
+                          ) : (
+                            (p.trader?.displayName ?? "—")
+                          )}
+                        </td>
                         <td title={p.proxyWallet ?? undefined}>
-                          {truncId(p.proxyWallet)}
+                          {p.proxyWallet ? (
+                            <Link to={`/traders/${p.proxyWallet}`}>
+                              {truncId(p.proxyWallet)}
+                            </Link>
+                          ) : (
+                            truncId(p.proxyWallet)
+                          )}
                         </td>
                         <td className="num">
                           {p.size != null ? p.size.toLocaleString() : "—"}

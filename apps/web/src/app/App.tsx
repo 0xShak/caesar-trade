@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { NavSidebar } from "@/components/NavSidebar";
 import { MarketsPage } from "./MarketsPage";
 import { MarketDetailPage } from "./MarketDetailPage";
+import { TradersPage } from "./TradersPage";
+import { TraderDetailPage } from "./TraderDetailPage";
 import { SpikePrivyPage } from "./SpikePrivyPage";
 
 function Placeholder({ title }: { title: string }) {
@@ -28,7 +30,8 @@ export function App() {
           <Route path="/markets/:id" element={<MarketDetailPage />} />
           <Route path="/spike-privy" element={<SpikePrivyPage />} />
           <Route path="/multiview" element={<Placeholder title="Multiview" />} />
-          <Route path="/traders" element={<Placeholder title="Traders" />} />
+          <Route path="/traders" element={<TradersPage />} />
+          <Route path="/traders/:id" element={<TraderDetailPage />} />
           <Route path="/portfolio" element={<Placeholder title="Portfolio" />} />
           <Route path="/signals" element={<Placeholder title="Signals" />} />
           <Route path="/monitor" element={<Placeholder title="Monitor" />} />
