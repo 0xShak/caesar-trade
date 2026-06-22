@@ -28,6 +28,7 @@ import {
 } from "@/lib/money";
 import { formatDollars } from "@caesar/money";
 import { PriceChart } from "@/components/PriceChart";
+import { OrderBook } from "@/components/OrderBook";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -421,6 +422,8 @@ export function MarketDetailPage() {
             </table>
           )}
         </section>
+
+        <OrderBook marketId={market.id} />
 
         <section className="detail-section">
           <div className="detail-section-title">Platform markets</div>

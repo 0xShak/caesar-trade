@@ -492,6 +492,97 @@ button {
   }
 }
 
+/* --- order book ladder (market detail) --- */
+.ob {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 360px;
+  font-size: 12px;
+}
+
+.ob-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ob-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 8px;
+  overflow: hidden;
+}
+
+/* depth bar grows from the right behind the numbers */
+.ob-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  opacity: 0.16;
+}
+
+.ob-ask .ob-bar {
+  background: var(--red);
+}
+
+.ob-bid .ob-bar {
+  background: var(--grn);
+}
+
+.ob-price,
+.ob-size {
+  position: relative;
+  z-index: 1;
+}
+
+.ob-ask .ob-price {
+  color: var(--red);
+}
+
+.ob-bid .ob-price {
+  color: var(--grn);
+}
+
+.ob-size {
+  color: var(--mut);
+  text-align: right;
+}
+
+.ob-mid {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  margin: 2px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+}
+
+.ob-mid-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+
+.ob-mid-val {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.ob-spread {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mut);
+}
+
 /* --- spike privy --- */
 .spike-wrap {
   max-width: 640px;

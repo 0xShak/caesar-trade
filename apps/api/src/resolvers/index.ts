@@ -29,6 +29,7 @@ import {
 } from "./traders.js";
 import { subscriptionResolvers } from "./subscriptions.js";
 import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
+import { resolveMarketOrderbook } from "./orderbook.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
 import {
   resolvePlaceOrder,
@@ -87,6 +88,9 @@ export const resolvers = {
 
     marketPriceHistory: (_parent: unknown, args: MarketPriceHistoryArgs) =>
       resolveMarketPriceHistory(args),
+
+    marketOrderbook: (_parent: unknown, args: { marketId: string }) =>
+      resolveMarketOrderbook(args.marketId),
 
     traders: (_parent: unknown, args: TradersArgs) => resolveTraders(args),
 

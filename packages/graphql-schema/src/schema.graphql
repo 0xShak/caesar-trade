@@ -109,6 +109,31 @@ type PricePoint {
   p: Float!
 }
 
+# Caesar extension (not in the original Parity SDL): live CLOB orderbook depth
+# for the market-detail page. Polymarket-only (Kalshi → null book). `price` is
+# the 0..1 probability (display); `priceMicrodollars` is micro-USD per share
+# (price × 1e6), mirroring MarketOutcome.midpointMicrodollars. `size` is the
+# share count resting at that level.
+type OrderbookLevel {
+  price: Float!
+  priceMicrodollars: Float!
+  size: Float!
+}
+
+# Sorted top-of-book first: bids descending by price, asks ascending.
+type Orderbook {
+  marketId: ID!
+  outcomeId: ID
+  tokenId: String
+  bids: [OrderbookLevel!]!
+  asks: [OrderbookLevel!]!
+  midpointMicrodollars: Float
+  spreadMicrodollars: Float
+  tickSize: Float
+  timestamp: Float
+  hash: String
+}
+
 type PlatformMarket {
   id: ID
   marketId: ID
@@ -1285,6 +1310,7 @@ type Query {
   marketsForNews(articleId: ID!): [MarketItemListEntry!]
   marketPositions(marketId: ID!): [MarketPositionGroup!]
   marketPriceHistory(marketId: ID!, interval: String, fidelity: Int): [PricePoint!]
+  marketOrderbook(marketId: ID!): Orderbook
   marketTrackedTraderTrades(marketId: ID!): [BaseTrade!]
 
   trackedTraders(limit: Int, offset: Int): [TrackedTrader!]
@@ -1348,12 +1374,13 @@ type Mutation {
 }
 
 # --------------------------------------------------------------------------- #
-# Subscription (6 ops)
+# Subscription (7 ops)
 # --------------------------------------------------------------------------- #
 
 type Subscription {
   marketStats(marketId: ID!): MarketOutcome
   marketNews(marketId: ID!): NewsArticle
+  orderbookUpdates(marketId: ID!): Orderbook
   marketTrades(marketId: ID!): BaseTrade
   multiMarketTrades(marketIds: [ID!]!): BaseTrade
   trackedTraderTrades: BaseTrade

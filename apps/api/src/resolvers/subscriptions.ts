@@ -11,6 +11,7 @@
 import { getDb, marketOutcomes } from "@caesar/db";
 import { and, eq } from "drizzle-orm";
 import { resolveMarketRecentTrades, type MappedTrade } from "./trades.js";
+import { resolveMarketOrderbook, type Orderbook } from "./orderbook.js";
 
 /** Cancellable-by-resolution sleep. */
 function sleep(ms: number): Promise<void> {
@@ -19,6 +20,7 @@ function sleep(ms: number): Promise<void> {
 
 const TRADE_POLL_MS = 3000;
 const STATS_POLL_MS = 5000;
+const ORDERBOOK_POLL_MS = 2000;
 
 // --------------------------------------------------------------------------- //
 // marketTrades(marketId) — stream new trades for a single market.
@@ -142,6 +144,29 @@ async function* marketStatsGen(marketId: string): AsyncGenerator<MarketStatsPayl
 }
 
 // --------------------------------------------------------------------------- //
+// orderbookUpdates(marketId) — stream the live CLOB book when it changes.
+// Polls /book and emits on hash change (plus the first snapshot, so a client
+// that only subscribes still gets current state). Polymarket-only; Kalshi/closed
+// markets yield one empty book and then idle.
+// --------------------------------------------------------------------------- //
+
+async function* orderbookUpdatesGen(marketId: string): AsyncGenerator<Orderbook> {
+  let lastHash: string | null | undefined;
+  try {
+    for (;;) {
+      const book = await resolveMarketOrderbook(marketId);
+      if (lastHash === undefined || book.hash !== lastHash) {
+        lastHash = book.hash;
+        yield book;
+      }
+      await sleep(ORDERBOOK_POLL_MS);
+    }
+  } finally {
+    // nothing to release
+  }
+}
+
+// --------------------------------------------------------------------------- //
 // Phase 5/2 — fields that exist in the SDL but have no realtime source yet.
 // Minimal generators that never emit so the fields resolve without erroring.
 // --------------------------------------------------------------------------- //
@@ -169,6 +194,11 @@ export const subscriptionResolvers = {
   marketStats: {
     subscribe: (_parent: unknown, args: { marketId: string }) => marketStatsGen(args.marketId),
     resolve: (payload: MarketStatsPayload) => payload,
+  },
+  orderbookUpdates: {
+    subscribe: (_parent: unknown, args: { marketId: string }) =>
+      orderbookUpdatesGen(args.marketId),
+    resolve: (payload: Orderbook) => payload,
   },
   // Phase 5/2 — no realtime source yet; never emits.
   trackedTraderTrades: {
