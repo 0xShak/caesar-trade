@@ -255,3 +255,97 @@ export interface GetMarketResult {
 export interface GetMarketVars {
   id: string;
 }
+
+// --------------------------------------------------------------------------- //
+// GetMarketTrades — live recent-trades tape (public venue data-APIs)
+// --------------------------------------------------------------------------- //
+
+export const GET_MARKET_TRADES = gql`
+  query GetMarketTrades($marketId: ID!, $limit: Int) {
+    marketRecentTrades(marketId: $marketId, limit: $limit) {
+      key
+      transactionHash
+      side
+      price
+      size
+      totalValue
+      datetime
+      platform
+      outcomeName
+      trader {
+        id
+        displayName
+      }
+    }
+  }
+`;
+
+export interface TradeTrader {
+  id: string | null;
+  displayName: string | null;
+}
+
+export interface RecentTrade {
+  key: string | null;
+  transactionHash: string | null;
+  side: string | null;
+  price: number | null;
+  size: number | null;
+  totalValue: number | null;
+  datetime: string | null;
+  platform: string | null;
+  outcomeName: string | null;
+  trader: TradeTrader | null;
+}
+
+export interface GetMarketTradesResult {
+  marketRecentTrades: RecentTrade[] | null;
+}
+
+export interface GetMarketTradesVars {
+  marketId: string;
+  limit?: number;
+}
+
+// --------------------------------------------------------------------------- //
+// GetMarketPositions — top holders panel (Polymarket only)
+// --------------------------------------------------------------------------- //
+
+export const GET_MARKET_POSITIONS = gql`
+  query GetMarketPositions($marketId: ID!) {
+    marketPositions(marketId: $marketId) {
+      outcomeId
+      outcome
+      outcomeIndex
+      positions {
+        proxyWallet
+        size
+        trader {
+          id
+          displayName
+        }
+      }
+    }
+  }
+`;
+
+export interface PositionHolder {
+  proxyWallet: string | null;
+  size: number | null;
+  trader: TradeTrader | null;
+}
+
+export interface PositionGroup {
+  outcomeId: string | null;
+  outcome: string | null;
+  outcomeIndex: number | null;
+  positions: PositionHolder[] | null;
+}
+
+export interface GetMarketPositionsResult {
+  marketPositions: PositionGroup[] | null;
+}
+
+export interface GetMarketPositionsVars {
+  marketId: string;
+}

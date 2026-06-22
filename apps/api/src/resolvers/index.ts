@@ -10,6 +10,13 @@ import {
   type EventArgs,
   type TagsArgs,
 } from "./markets.js";
+import {
+  resolveMarketRecentTrades,
+  resolveMarketRecentTradesBasic,
+  resolveMarketPositions,
+  type MarketRecentTradesArgs,
+  type MarketPositionsArgs,
+} from "./trades.js";
 
 /**
  * Phase 1 resolvers. The market read paths (markets, homeMarkets, market, event,
@@ -21,6 +28,12 @@ import {
  */
 
 export const resolvers = {
+  // Interface type resolvers. Trades/holders return concrete BaseTrade/BaseTrader
+  // shapes; the SDL exposes them through the ITrade/ITrader interfaces, which need
+  // a __resolveType so GraphQL can pick the object type at runtime.
+  ITrader: { __resolveType: () => "BaseTrader" },
+  ITrade: { __resolveType: () => "BaseTrade" },
+
   Query: {
     health: () => "ok",
 
@@ -33,6 +46,15 @@ export const resolvers = {
     event: (_parent: unknown, args: EventArgs) => resolveEvent(args),
 
     tags: (_parent: unknown, args: TagsArgs) => resolveTags(args),
+
+    marketRecentTrades: (_parent: unknown, args: MarketRecentTradesArgs) =>
+      resolveMarketRecentTrades(args),
+
+    marketRecentTradesBasic: (_parent: unknown, args: MarketRecentTradesArgs) =>
+      resolveMarketRecentTradesBasic(args),
+
+    marketPositions: (_parent: unknown, args: MarketPositionsArgs) =>
+      resolveMarketPositions(args),
 
     // Stub user so the FE onboarding gates have something to read.
     me: () => ({
