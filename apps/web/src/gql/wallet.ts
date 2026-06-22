@@ -32,6 +32,46 @@ export const DEPOSIT_WALLET_NONCE = gql`
   }
 `;
 
+/** Live positions held by the user's deposit wallet (Polymarket data-api). */
+export const POLYMARKET_POSITIONS = gql`
+  query PolymarketPositions {
+    polymarketPositions {
+      asset
+      conditionId
+      title
+      outcome
+      size
+      avgPrice
+      curPrice
+      initialValue
+      currentValue
+      cashPnl
+      percentPnl
+      redeemable
+    }
+  }
+`;
+
+/** The user's resting (open) orders on the CLOB. */
+export const POLYMARKET_OPEN_ORDERS = gql`
+  query PolymarketOpenOrders {
+    polymarketOpenOrders {
+      id
+      status
+      conditionId
+      assetId
+      outcome
+      side
+      price
+      originalSize
+      sizeMatched
+      sizeRemaining
+      orderType
+      createdAt
+    }
+  }
+`;
+
 /** Relayer-driven, gasless creation of the user's CLOB V2 deposit wallet. */
 export const CREATE_DEPOSIT_WALLET = gql`
   mutation CreateDepositWallet {

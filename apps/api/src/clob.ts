@@ -205,6 +205,47 @@ export async function postOrder(
   return { ok: res.ok, status: res.status, body: parsed };
 }
 
+/**
+ * Raw shape of an open order from `GET /data/orders` (clob-client OpenOrder).
+ * snake_case as the API returns it; the resolver maps it to the SDL camelCase.
+ */
+export interface RawOpenOrder {
+  id?: string;
+  status?: string;
+  market?: string;
+  asset_id?: string;
+  outcome?: string;
+  side?: string;
+  price?: string;
+  original_size?: string;
+  size_matched?: string;
+  order_type?: string;
+  created_at?: number;
+}
+
+/**
+ * GET /data/orders — the authenticated user's resting (open) orders. Same host
+ * as the (working) server-side book reads, so this runs server-side; only the
+ * order-placement POST is geoblocked (see clob-geoblock memory). If a live run
+ * shows this endpoint is geoblocked too, switch to the prepared browser-fetch
+ * pattern (`prepareOrderRequest`-style) — the mechanism is already proven.
+ */
+export async function getOpenOrders(signerAddress: string, creds: ApiCreds): Promise<ClobResponse> {
+  const path = "/data/orders";
+  const res = await fetch(`${clobHost()}${path}`, {
+    method: "GET",
+    headers: l2Headers(signerAddress, creds, "GET", path, undefined),
+  });
+  const text = await res.text();
+  let parsed: unknown = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* keep raw text */
+  }
+  return { ok: res.ok, status: res.status, body: parsed };
+}
+
 /** DELETE /order to cancel a single resting order by its CLOB order id (hash). */
 export async function cancelOrder(
   signerAddress: string,

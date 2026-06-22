@@ -31,7 +31,12 @@ import { subscriptionResolvers } from "./subscriptions.js";
 import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
 import { resolveMarketOrderbook } from "./orderbook.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
-import { resolveWalletBalance, resolvePolymarketAccountState } from "./portfolio.js";
+import {
+  resolveWalletBalance,
+  resolvePolymarketAccountState,
+  resolvePolymarketPositions,
+  resolvePolymarketOpenOrders,
+} from "./portfolio.js";
 import {
   resolvePlaceOrder,
   resolvePlaceSplitOrder,
@@ -132,6 +137,14 @@ export const resolvers = {
     // CLOB V2 deposit-wallet Batch nonce (browser signs approvals with it).
     depositWalletNonce: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
       resolveDepositWalletNonce(ctx),
+
+    // Live positions held by the user's deposit wallet (data-api).
+    polymarketPositions: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolvePolymarketPositions(ctx),
+
+    // The user's resting CLOB orders (GET /data/orders).
+    polymarketOpenOrders: (_parent: unknown, _args: unknown, ctx: GraphQLContext) =>
+      resolvePolymarketOpenOrders(ctx),
   },
 
   Mutation: {
