@@ -114,8 +114,8 @@ export function OrderBook({ marketId }: { marketId: string }) {
             ))}
           </div>
           <div className="ob-mid">
-            <span className="ob-mid-label">mid</span>
             <span className="ob-mid-val num">{micToCents(book.midpointMicrodollars)}</span>
+            <span className="ob-mid-label">mid</span>
             <span className="ob-spread">spread {micToCents(book.spreadMicrodollars)}</span>
           </div>
           <div className="ob-side">

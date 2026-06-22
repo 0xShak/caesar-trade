@@ -510,18 +510,21 @@ button {
 .ob-row {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* fixed price + size columns so every row lands on the same vertical lines
+     (each row is its own grid — fixed tracks are what keep them aligned); the
+     trailing 1fr is empty space the depth bar extends into. */
+  grid-template-columns: 4rem 4.5rem 1fr;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 2px 8px;
   overflow: hidden;
 }
 
-/* depth bar grows from the right behind the numbers */
+/* depth bar grows rightward from the price side, behind the numbers */
 .ob-bar {
   position: absolute;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   z-index: 0;
   opacity: 0.16;
@@ -555,14 +558,22 @@ button {
 }
 
 .ob-mid {
-  display: flex;
+  display: grid;
+  /* same tracks as .ob-row so the mid price lines up under the ladder prices
+     and the spread lines up under the sizes. */
+  grid-template-columns: 4rem 1fr auto;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
   padding: 5px 8px;
   margin: 2px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--bg2);
+}
+
+.ob-mid-val {
+  font-weight: 600;
+  color: var(--fg);
 }
 
 .ob-mid-label {
@@ -572,14 +583,9 @@ button {
   color: var(--mut);
 }
 
-.ob-mid-val {
-  font-weight: 600;
-  color: var(--fg);
-}
-
 .ob-spread {
-  margin-left: auto;
   font-size: 11px;
+  text-align: right;
   color: var(--mut);
 }
 
