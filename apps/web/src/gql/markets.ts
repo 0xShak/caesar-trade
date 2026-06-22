@@ -401,3 +401,32 @@ export interface GetMarketPositionsResult {
 export interface GetMarketPositionsVars {
   marketId: string;
 }
+
+// --------------------------------------------------------------------------- //
+// GetMarketPriceHistory — primary-outcome price series for the detail chart
+// (t = unix seconds, p = probability 0..1; Polymarket-only).
+// --------------------------------------------------------------------------- //
+
+export const GET_MARKET_PRICE_HISTORY = gql`
+  query GetMarketPriceHistory($marketId: ID!, $interval: String, $fidelity: Int) {
+    marketPriceHistory(marketId: $marketId, interval: $interval, fidelity: $fidelity) {
+      t
+      p
+    }
+  }
+`;
+
+export interface PricePoint {
+  t: number;
+  p: number;
+}
+
+export interface GetMarketPriceHistoryResult {
+  marketPriceHistory: PricePoint[] | null;
+}
+
+export interface GetMarketPriceHistoryVars {
+  marketId: string;
+  interval?: string;
+  fidelity?: number;
+}

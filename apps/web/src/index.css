@@ -621,3 +621,36 @@ button {
 .setup-step.done svg {
   color: var(--grn);
 }
+
+/* --- price chart (market detail, Phase 1 enrichment) --- */
+.price-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.price-chart-intervals {
+  display: flex;
+  gap: 4px;
+}
+
+.price-chart-intervals .chip {
+  padding: 3px 9px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  background: var(--bg3);
+  color: var(--mut);
+  cursor: pointer;
+}
+
+.price-chart-intervals .chip-on {
+  color: #0c0e12;
+  background: var(--acc);
+  border-color: var(--acc);
+}
+
+.price-chart-body {
+  width: 100%;
+  min-height: 240px;
+}

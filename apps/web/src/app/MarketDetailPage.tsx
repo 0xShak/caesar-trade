@@ -27,6 +27,7 @@ import {
   truncId,
 } from "@/lib/money";
 import { formatDollars } from "@caesar/money";
+import { PriceChart } from "@/components/PriceChart";
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -375,6 +376,10 @@ export function MarketDetailPage() {
             })}
           />
         </div>
+
+        <section className="detail-section">
+          <PriceChart marketId={market.id} />
+        </section>
 
         <section className="detail-section">
           <div className="detail-section-title">Outcomes</div>

@@ -102,6 +102,13 @@ type MarketOutcome {
   spreadMicrodollars: Float
 }
 
+# Caesar extension (not in the original Parity SDL): primary-outcome price
+# history for the detail-page chart. `t` = unix seconds; `p` = probability 0..1.
+type PricePoint {
+  t: Int!
+  p: Float!
+}
+
 type PlatformMarket {
   id: ID
   marketId: ID
@@ -1277,6 +1284,7 @@ type Query {
   marketRecentNews(marketId: ID!, start: DateTime, end: DateTime, before: DateTime, limit: Int): [NewsArticle!]
   marketsForNews(articleId: ID!): [MarketItemListEntry!]
   marketPositions(marketId: ID!): [MarketPositionGroup!]
+  marketPriceHistory(marketId: ID!, interval: String, fidelity: Int): [PricePoint!]
   marketTrackedTraderTrades(marketId: ID!): [BaseTrade!]
 
   trackedTraders(limit: Int, offset: Int): [TrackedTrader!]

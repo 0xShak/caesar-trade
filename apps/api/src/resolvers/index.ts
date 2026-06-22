@@ -28,6 +28,7 @@ import {
   type TraderPositionsArgs,
 } from "./traders.js";
 import { subscriptionResolvers } from "./subscriptions.js";
+import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
 import type { GraphQLContext } from "../auth.js";
 
@@ -71,6 +72,9 @@ export const resolvers = {
 
     marketPositions: (_parent: unknown, args: MarketPositionsArgs) =>
       resolveMarketPositions(args),
+
+    marketPriceHistory: (_parent: unknown, args: MarketPriceHistoryArgs) =>
+      resolveMarketPriceHistory(args),
 
     traders: (_parent: unknown, args: TradersArgs) => resolveTraders(args),
 
