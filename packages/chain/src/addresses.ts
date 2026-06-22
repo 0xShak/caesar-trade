@@ -23,15 +23,22 @@ export interface PolymarketContracts {
 }
 
 /**
- * ⚠️ COLLATERAL_HAZARD — bible §8 / dossier §2.1 / §9.
- * The bundle ships `0xC011a7E1…2DFB` as `collateral` in BOTH the Amoy and Matic
- * blocks. Canonical Polymarket USDC.e on Polygon is
- * `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`. This is almost certainly a
- * placeholder overridden at runtime. DO NOT use this constant to sign real
- * mainnet orders until the real collateral is confirmed against live Polymarket
- * docs (verify-before-mainnet gate, Phase 3).
+ * COLLATERAL — resolved 2026-06-22 (was flagged COLLATERAL_HAZARD).
+ * `0xC011a7E1…2DFB` is NOT a placeholder: PolygonScan confirms it is the real
+ * **pUSD** ("Polymarket USD") token — the collateral for the **CLOB V2** stack
+ * on Polygon mainnet (ERC-20, ~$484M supply, EIP-1167 proxy). pUSD is backed by
+ * USDC.e (`0x2791Bca1…84174`), wrapped/unwrapped via Polymarket's Collateral
+ * onramp/offramp. The legacy V1 exchange traded directly in USDC.e.
+ * So: V2 collateral = pUSD (this constant); V1 collateral = USDC.e.
+ * Sources: docs.polymarket.com/concepts/pusd, PolygonScan. See docs/MAINNET-GATES.md.
+ *
+ * Still verify before mainnet: token DECIMALS + approval semantics against the
+ * live contract, and the Amoy/testnet pUSD address (the bundle reuses the same
+ * address for Amoy — UNVERIFIED).
  */
-export const COLLATERAL_PLACEHOLDER: Address = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+export const COLLATERAL_PUSD_V2: Address = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+/** @deprecated misnomer — this address is real pUSD, not a placeholder. Use COLLATERAL_PUSD_V2. */
+export const COLLATERAL_PLACEHOLDER: Address = COLLATERAL_PUSD_V2;
 export const CANONICAL_USDC_E_POLYGON: Address = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 
 export const MATIC_CONTRACTS: PolymarketContracts = {

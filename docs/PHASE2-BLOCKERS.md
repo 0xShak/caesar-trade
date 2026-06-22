@@ -62,14 +62,17 @@ Not required to build Phase 2 logic; only to execute a live testnet deploy.
 
 ---
 
-## Mainnet gates (still open from Phase 0 — block Phase 3 trading, NOT Phase 1/4)
-1. Real Polymarket **collateral address** (bundle's `0xC011a7E1…2DFB` is a placeholder).
-2. Caesar **builderCode** (bytes32) registration + `/fees/builder-fees/<code>` check.
-3. Confirm **Kalshi RSA-PSS** scheme against the official example (needs demo creds — see
-   `docs/NEXT-SESSION-PROMPT.md`).
-4. **Amoy CLOB reality** (see §2 above).
+## Mainnet gates (block Phase 3 trading, NOT Phase 1/2/4) — see docs/MAINNET-GATES.md
+1. Polymarket **collateral**: ✅ RESOLVED — `0xC011a7E1…2DFB` is real **pUSD** (CLOB V2
+   collateral), not a placeholder; V1 used USDC.e. Code: `COLLATERAL_PUSD_V2`. Still verify
+   decimals/approvals + the Amoy pUSD address.
+2. Caesar **builderCode** (bytes32): ◑ Builder Program is live; register via the settings UI,
+   carry it in the V2 order's `builder` field. Bundle's REST endpoints unverified — confirm
+   with support.
+3. **Kalshi RSA-PSS** scheme: ⛔ blocked (no demo creds — user has no phone). Deferred.
+4. **Amoy CLOB reality**: ✅ RESOLVED — no testnet CLOB (see §2 above).
 
-**Do not trade real funds until 1–3 are resolved.**
+**Do not trade real funds until 1–2 are confirmed live on a funded mainnet dry-run.**
 
 ---
 
