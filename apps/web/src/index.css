@@ -444,6 +444,46 @@ button {
   color: var(--acc);
 }
 
+/* --- live trades tape (graphql-ws) --- */
+.live-pill {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--grn);
+  color: var(--grn);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.live-pill::first-letter {
+  /* keep the ● bullet steady while the text pulses */
+  animation: live-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes live-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Briefly flag a freshly-streamed row. */
+.trade-row-new {
+  animation: trade-flash 1.5s ease-out;
+}
+
+@keyframes trade-flash {
+  0% {
+    background: color-mix(in srgb, var(--grn) 28%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 /* --- spike privy --- */
 .spike-wrap {
   max-width: 640px;

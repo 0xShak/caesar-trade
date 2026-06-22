@@ -1,15 +1,21 @@
-import { useQuery } from "@apollo/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useSubscription } from "@apollo/client";
 import { Link, useParams } from "react-router-dom";
 import {
   GET_MARKET,
   GET_MARKET_TRADES,
   GET_MARKET_POSITIONS,
+  MARKET_TRADES_SUB,
   type GetMarketResult,
   type GetMarketVars,
   type GetMarketTradesResult,
   type GetMarketTradesVars,
   type GetMarketPositionsResult,
   type GetMarketPositionsVars,
+  type MarketTradesSubResult,
+  type MarketTradesSubVars,
+  type RecentTrade,
+  type SubTrade,
   type DetailOutcome,
 } from "@/gql/markets";
 import {
@@ -63,22 +69,110 @@ function fmtMicroValue(value: number | null): string {
   return formatDollars(BigInt(Math.round(value)));
 }
 
+/** Max rows kept in the live tape. */
+const TRADE_TAPE_CAP = 50;
+
+/** Stable identity for a tape row (dedupe + React key). */
+function tradeKey(t: RecentTrade): string {
+  return (
+    t.key ??
+    t.transactionHash ??
+    `${t.datetime ?? ""}:${t.outcomeName ?? ""}:${t.side ?? ""}:${t.size ?? ""}`
+  );
+}
+
+/** Normalize a live SubTrade into the tape's RecentTrade shape. */
+function subTradeToRow(s: SubTrade): RecentTrade {
+  return {
+    key: s.transactionHash,
+    transactionHash: s.transactionHash,
+    side: s.side,
+    price: s.price,
+    size: s.size,
+    totalValue: s.totalValue,
+    datetime: s.datetime,
+    platform: null,
+    outcomeName: s.outcomeName,
+    trader: s.trader ? { id: null, displayName: s.trader.displayName } : null,
+  };
+}
+
 function RecentTradesSection({ marketId }: { marketId: string }) {
   const { data, loading, error } = useQuery<
     GetMarketTradesResult,
     GetMarketTradesVars
-  >(GET_MARKET_TRADES, { variables: { marketId, limit: 50 } });
+  >(GET_MARKET_TRADES, { variables: { marketId, limit: TRADE_TAPE_CAP } });
 
-  const trades = data?.marketRecentTrades ?? [];
+  // Local tape: backfilled from the query, prepended by the live subscription.
+  const [tape, setTape] = useState<RecentTrade[]>([]);
+  // Keys that arrived via the live socket (for a brief row highlight).
+  const [liveKeys, setLiveKeys] = useState<Set<string>>(() => new Set());
+  const seenRef = useRef<Set<string>>(new Set());
+
+  // Seed / re-seed the tape whenever the backfill query resolves.
+  const backfill = useMemo(
+    () => data?.marketRecentTrades ?? null,
+    [data?.marketRecentTrades],
+  );
+  useEffect(() => {
+    if (!backfill) return;
+    const rows = backfill.slice(0, TRADE_TAPE_CAP);
+    seenRef.current = new Set(rows.map(tradeKey));
+    setTape(rows);
+  }, [backfill]);
+
+  const { data: subData } = useSubscription<
+    MarketTradesSubResult,
+    MarketTradesSubVars
+  >(MARKET_TRADES_SUB, {
+    variables: { marketId },
+    // WS down / server error must not blank the tape — log and keep the
+    // query-backfilled rows.
+    onError: (err) => {
+      console.warn("[marketTrades] subscription error:", err.message);
+    },
+  });
+
+  // Prepend each new live trade, deduped by key, capped at TRADE_TAPE_CAP.
+  useEffect(() => {
+    const incoming = subData?.marketTrades;
+    if (!incoming) return;
+    const row = subTradeToRow(incoming);
+    const k = tradeKey(row);
+    if (seenRef.current.has(k)) return;
+    seenRef.current.add(k);
+    setTape((prev) => [row, ...prev].slice(0, TRADE_TAPE_CAP));
+    setLiveKeys((prev) => new Set(prev).add(k));
+    // Drop the highlight after a beat.
+    const timer = window.setTimeout(() => {
+      setLiveKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(k);
+        return next;
+      });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [subData]);
+
+  // Live once the WS link has delivered at least one payload (or is mounted
+  // without error); we show the pill whenever the subscription is wired up.
+  const isLive = subData != null || tape.length > 0;
 
   return (
     <section className="detail-section">
-      <div className="detail-section-title">Recent trades</div>
+      <div className="detail-section-title">
+        Recent trades
+        {isLive && (
+          <span className="live-pill" title="Streaming live trades">
+            ● live
+          </span>
+        )}
+      </div>
       {loading && !data ? (
         <div className="state-msg">Loading trades…</div>
       ) : error ? (
         <div className="state-msg state-err">{error.message}</div>
-      ) : trades.length === 0 ? (
+      ) : tape.length === 0 ? (
         <div className="state-msg">No recent trades.</div>
       ) : (
         <table className="mono-table">
@@ -93,20 +187,26 @@ function RecentTradesSection({ marketId }: { marketId: string }) {
             </tr>
           </thead>
           <tbody>
-            {trades.map((t, i) => (
-              <tr key={t.key ?? `${t.transactionHash}:${i}`}>
-                <td>{fmtTime(t.datetime)}</td>
-                <td>
-                  <span className={sideClass(t.side)}>{t.side ?? "—"}</span>
-                </td>
-                <td>{t.outcomeName ?? "—"}</td>
-                <td className="num">{tradePriceCents(t.price)}</td>
-                <td className="num">
-                  {t.size != null ? t.size.toLocaleString() : "—"}
-                </td>
-                <td className="num">{fmtMicroValue(t.totalValue)}</td>
-              </tr>
-            ))}
+            {tape.map((t, i) => {
+              const k = tradeKey(t);
+              return (
+                <tr
+                  key={`${k}:${i}`}
+                  className={liveKeys.has(k) ? "trade-row-new" : undefined}
+                >
+                  <td>{fmtTime(t.datetime)}</td>
+                  <td>
+                    <span className={sideClass(t.side)}>{t.side ?? "—"}</span>
+                  </td>
+                  <td>{t.outcomeName ?? "—"}</td>
+                  <td className="num">{tradePriceCents(t.price)}</td>
+                  <td className="num">
+                    {t.size != null ? t.size.toLocaleString() : "—"}
+                  </td>
+                  <td className="num">{fmtMicroValue(t.totalValue)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

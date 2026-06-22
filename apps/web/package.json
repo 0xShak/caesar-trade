@@ -27,6 +27,7 @@
     "date-fns": "^4.1.0",
     "decimal.js": "^10.4.3",
     "graphql": "^16.10.0",
+    "graphql-ws": "^6.0.4",
     "immer": "^10.1.1",
     "lucide-react": "^0.469.0",
     "react": "^19.2.0",

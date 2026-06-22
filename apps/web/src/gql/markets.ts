@@ -308,6 +308,58 @@ export interface GetMarketTradesVars {
 }
 
 // --------------------------------------------------------------------------- //
+// MarketTrades — live tape subscription (graphql-ws over the WS link)
+// --------------------------------------------------------------------------- //
+
+/**
+ * Streams new trades for a market as they land. Mirrors the GetMarketTrades row
+ * shape so subscription payloads slot straight into the existing tape; uses
+ * `transactionHash` as the stable dedupe key. (BaseTrade has no `key`/`platform`
+ * /`trader.id`, so those are omitted vs. the backfill query.)
+ */
+export const MARKET_TRADES_SUB = gql`
+  subscription MarketTrades($marketId: ID!) {
+    marketTrades(marketId: $marketId) {
+      transactionHash
+      side
+      price
+      size
+      totalValue
+      datetime
+      outcomeName
+      marketQuestion
+      trader {
+        displayName
+      }
+    }
+  }
+`;
+
+export interface SubTradeTrader {
+  displayName: string | null;
+}
+
+export interface SubTrade {
+  transactionHash: string | null;
+  side: string | null;
+  price: number | null;
+  size: number | null;
+  totalValue: number | null;
+  datetime: string | null;
+  outcomeName: string | null;
+  marketQuestion: string | null;
+  trader: SubTradeTrader | null;
+}
+
+export interface MarketTradesSubResult {
+  marketTrades: SubTrade | null;
+}
+
+export interface MarketTradesSubVars {
+  marketId: string;
+}
+
+// --------------------------------------------------------------------------- //
 // GetMarketPositions — top holders panel (Polymarket only)
 // --------------------------------------------------------------------------- //
 
