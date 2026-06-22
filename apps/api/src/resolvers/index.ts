@@ -30,6 +30,18 @@ import {
 import { subscriptionResolvers } from "./subscriptions.js";
 import { resolveMarketPriceHistory, type MarketPriceHistoryArgs } from "./prices.js";
 import { resolveMe, resolveSyncTosFromPrivy } from "./me.js";
+import {
+  resolvePlaceOrder,
+  resolvePlaceSplitOrder,
+  resolvePlaceMergeOrder,
+  resolvePlaceOrderBatch,
+  resolveCancelOrder,
+  resolveCancelMarketOrders,
+  type PlaceOrderInput,
+  type PlaceOrderBatchInput,
+  type CancelOrderInput,
+  type CancelMarketOrdersInput,
+} from "./orders.js";
 import type { GraphQLContext } from "../auth.js";
 
 /**
@@ -96,5 +108,29 @@ export const resolvers = {
       args: { acceptTos?: boolean | null },
       ctx: GraphQLContext,
     ) => resolveSyncTosFromPrivy(ctx, args.acceptTos),
+
+    // Phase 3 trading — constructs + validates the V2 order off @caesar/chain
+    // but stays gated behind CAESAR_ENABLE_MAINNET_TRADING (default off): no
+    // signing, no CLOB submission. See ./orders.ts.
+    placeOrder: (_p: unknown, args: { input: PlaceOrderInput }, ctx: GraphQLContext) =>
+      resolvePlaceOrder(ctx, args.input),
+
+    placeSplitOrder: (_p: unknown, args: { input: PlaceOrderInput }, ctx: GraphQLContext) =>
+      resolvePlaceSplitOrder(ctx, args.input),
+
+    placeMergeOrder: (_p: unknown, args: { input: PlaceOrderInput }, ctx: GraphQLContext) =>
+      resolvePlaceMergeOrder(ctx, args.input),
+
+    placeOrderBatch: (_p: unknown, args: { input: PlaceOrderBatchInput }, ctx: GraphQLContext) =>
+      resolvePlaceOrderBatch(ctx, args.input),
+
+    cancelOrder: (_p: unknown, args: { input: CancelOrderInput }, ctx: GraphQLContext) =>
+      resolveCancelOrder(ctx, args.input),
+
+    cancelMarketOrders: (
+      _p: unknown,
+      args: { input: CancelMarketOrdersInput },
+      ctx: GraphQLContext,
+    ) => resolveCancelMarketOrders(ctx, args.input),
   },
 };
