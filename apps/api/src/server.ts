@@ -36,7 +36,16 @@ const yoga = createYoga({
     origin: CORS_ORIGINS,
     credentials: true,
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["authorization", "content-type", "privy-id-token", "accept"],
+    // `x-graphql-operation` is set client-side by our Apollo authLink (apps/web
+    // src/lib/apollo.ts) to tag each request with its operation name; it must be
+    // allow-listed here or the browser blocks the preflight (CORS).
+    allowedHeaders: [
+      "authorization",
+      "content-type",
+      "privy-id-token",
+      "accept",
+      "x-graphql-operation",
+    ],
   },
   // Per-request Privy auth (Phase 2): verify Authorization + privy-id-token →
   // { auth: { userId, idToken } | null }. Public reads still work when null.
