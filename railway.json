@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "buildCommand": "echo 'no compile step — the API runs from TypeScript via tsx at runtime'"
+  },
+  "deploy": {
+    "startCommand": "pnpm --filter @caesar/api start",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}

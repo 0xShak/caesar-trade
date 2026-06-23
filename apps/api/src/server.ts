@@ -9,7 +9,17 @@ import { schema } from "./schema.js";
 import { buildContext, buildWsContext, getEmbeddedWallet } from "./auth.js";
 
 const env = loadEnv();
-const PORT = 4000;
+// Railway (and most PaaS) inject PORT and route to 0.0.0.0; fall back to 4000 locally.
+const PORT = Number(process.env.PORT) || 4000;
+
+// Browser origins allowed to call the API with credentials (comma-separated),
+// e.g. "https://app.trycaesar.xyz". The frontend lives on a different origin than
+// the API in production, so this must list the exact origin(s) — "*" is invalid
+// once credentials are included. Defaults to local dev.
+const CORS_ORIGINS = (process.env.CORS_ORIGIN ?? "http://localhost:3010")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const app = Fastify({ logger: true });
 
@@ -18,6 +28,15 @@ const yoga = createYoga({
   graphqlEndpoint: "/graphql",
   graphiql: true,
   logging: false,
+  // Cross-origin: the SPA (app.trycaesar.xyz) calls this API (api.trycaesar.xyz)
+  // with credentials + a Privy Bearer token, so we echo the exact origin and allow
+  // the auth headers. Yoga answers the preflight on the shared /graphql route.
+  cors: {
+    origin: CORS_ORIGINS,
+    credentials: true,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["authorization", "content-type", "privy-id-token", "accept"],
+  },
   // Per-request Privy auth (Phase 2): verify Authorization + privy-id-token →
   // { auth: { userId, idToken } | null }. Public reads still work when null.
   context: ({ request }) => buildContext(request.headers),
@@ -88,7 +107,7 @@ app.post("/api/spike/privy-verify", async (req, reply) => {
 app.get("/health", async () => ({ ok: true }));
 
 app
-  .listen({ port: PORT, host: "127.0.0.1" })
+  .listen({ port: PORT, host: "0.0.0.0" })
   .then(() => {
     app.log.info(`Caesar API listening — GraphQL at http://localhost:${PORT}/graphql`);
 
@@ -106,7 +125,7 @@ app
       },
       wss,
     );
-    app.log.info("GraphQL subscriptions (graphql-ws) on ws://localhost:4000/graphql");
+    app.log.info(`GraphQL subscriptions (graphql-ws) on ws://0.0.0.0:${PORT}/graphql`);
   })
   .catch((err: unknown) => {
     app.log.error(err);
