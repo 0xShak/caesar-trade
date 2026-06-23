@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { useServer } from "graphql-ws/use/ws";
 import { PrivyClient } from "@privy-io/server-auth";
 import { loadEnv } from "@caesar/config";
+import { getPool } from "@caesar/db";
 import { schema } from "./schema.js";
 import { buildContext, buildWsContext, getEmbeddedWallet } from "./auth.js";
 
@@ -105,6 +106,23 @@ app.post("/api/spike/privy-verify", async (req, reply) => {
 });
 
 app.get("/health", async () => ({ ok: true }));
+
+// Diagnostic: surfaces the RAW DB error that the GraphQL layer masks. Reports the
+// DATABASE_URL host (password redacted) plus a live query result or the driver
+// error. TEMPORARY — remove once the DB connection is confirmed.
+app.get("/health/db", async (_req, reply) => {
+  const url = process.env.DATABASE_URL ?? "(unset)";
+  const host = url.replace(/\/\/[^@]*@/, "//***@");
+  try {
+    const r = await getPool().query("select count(*)::int n from markets");
+    return reply.send({ ok: true, host, markets: r.rows[0].n });
+  } catch (e) {
+    const err = e as { message?: string; code?: string };
+    return reply
+      .status(500)
+      .send({ ok: false, host, code: err.code ?? null, error: (err.message ?? String(e)).slice(0, 400) });
+  }
+});
 
 app
   .listen({ port: PORT, host: "0.0.0.0" })
