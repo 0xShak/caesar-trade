@@ -1,7 +1,6 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
     "buildCommand": "echo 'no compile step — the API runs from TypeScript via tsx at runtime'"
   },
   "deploy": {
